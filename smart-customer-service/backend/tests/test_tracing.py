@@ -305,7 +305,7 @@ class TestCreateSpan:
         assert call_kwargs["name"] == "test_span"
         assert call_kwargs["input"] == {"query": "test"}
         assert call_kwargs["metadata"] == {"source": "unit_test"}
-        assert span == mock_span
+        assert span.span == mock_span
 
     def test_create_span_with_none_input(self):
         """Arrange-Act-Assert: Verify span creation works without input_data."""
@@ -337,7 +337,7 @@ class TestCreateSpan:
             result = create_span(name="return_test")
 
         # Assert
-        assert result is mock_span
+        assert result.span is mock_span
 
 
 class TestScoreTrace:
