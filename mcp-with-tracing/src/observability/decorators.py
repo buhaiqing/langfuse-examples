@@ -3,10 +3,11 @@ Decorators for MCP tool instrumentation.
 """
 
 from functools import wraps
-from typing import Callable
+from typing import Callable, Optional
 
 from langfuse import propagate_attributes
 from src.observability.session import SessionManager
+from src.observability.prompt_versioning import get_active_prompt_version
 
 
 def observe_tool(name: str = None):
@@ -53,13 +54,30 @@ def track_session(session_id: str, user_id: str = None):
     return decorator
 
 
-def track_prompt_version(prompt_id: str, version: str):
-    """Decorator to attach prompt version metadata to traces."""
+def track_prompt_version(prompt_id: str, version: str = None):
+    """Decorator to attach prompt version metadata to traces.
+    
+    Args:
+        prompt_id: The prompt identifier
+        version: Optional version string. If None, will use active version from manager.
+    """
 
     def decorator(func: Callable) -> Callable:
         @wraps(func)
         def wrapper(*args, **kwargs):
-            return func(*args, **kwargs)
+            # Get version if not specified
+            actual_version = version
+            if actual_version is None:
+                actual_version = get_active_prompt_version(prompt_id)
+            
+            # Propagate prompt version metadata
+            with propagate_attributes(
+                metadata={
+                    "prompt_id": prompt_id,
+                    "prompt_version": actual_version,
+                }
+            ):
+                return func(*args, **kwargs)
 
         wrapper._langfuse_prompt_id = prompt_id
         wrapper._langfuse_prompt_version = version

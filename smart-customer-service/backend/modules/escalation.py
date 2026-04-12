@@ -1,11 +1,12 @@
 """
 Escalation management module with Langfuse tracing
-Handles fallback responses and human agent handoff
+Handles fallback responses, human agent handoff, and collaboration mode
 """
 
 import time
 from dataclasses import dataclass
 from enum import Enum
+from typing import Any, Dict, Optional
 
 import httpx
 
@@ -14,6 +15,8 @@ from core.logging_config import LogCategory, get_logger
 from core.scoring import score_escalation_required
 from core.tracing import add_event, create_span
 from modules.dialogue_manager import ConversationState
+from modules.escalation.collaboration import CollaborationManager, CollaborationMode
+from modules.escalation.websocket_client import WebSocketClient
 from modules.intent_recognition import IntentResult
 
 logger = get_logger(LogCategory.ESCALATION)
@@ -41,18 +44,35 @@ class EscalationDecision:
 
 
 class EscalationManager:
-    """Manages escalation decisions with Langfuse tracing"""
+    """Manages escalation decisions with Langfuse tracing and collaboration support"""
 
     def __init__(
         self,
         confidence_threshold: float = 0.6,
         max_retry_count: int = 3,
         sentiment_threshold: float = -0.7,
+        websocket_client: Optional[WebSocketClient] = None,
+        enable_collaboration: bool = True,
     ):
         logger.info("Initializing Escalation Manager")
         self.confidence_threshold = confidence_threshold
         self.max_retry_count = max_retry_count
         self.sentiment_threshold = sentiment_threshold
+        self.enable_collaboration = enable_collaboration
+
+        # Initialize CollaborationManager if enabled
+        self.collaboration_manager: Optional[CollaborationManager] = None
+        if enable_collaboration and websocket_client:
+            self.collaboration_manager = CollaborationManager(
+                websocket_client=websocket_client,
+                escalation_manager=self,
+            )
+            logger.info("CollaborationManager initialized")
+        elif enable_collaboration and not websocket_client:
+            logger.warning(
+                "Collaboration enabled but no WebSocketClient provided. "
+                "Collaboration features will be disabled."
+            )
 
         self.fallback_templates = {
             EscalationReason.LOW_CONFIDENCE: "抱歉，我可能没有完全理解您的问题。能否请您换一种方式描述，或者提供更多细节？",
@@ -64,7 +84,8 @@ class EscalationManager:
         }
         logger.info(
             f"Escalation Manager initialized: confidence_threshold={confidence_threshold}, "
-            f"max_retry_count={max_retry_count}, sentiment_threshold={sentiment_threshold}"
+            f"max_retry_count={max_retry_count}, sentiment_threshold={sentiment_threshold}, "
+            f"collaboration_enabled={enable_collaboration}"
         )
 
     async def evaluate_escalation(
@@ -347,9 +368,106 @@ class EscalationManager:
         }
         return priority_map.get(reason, "medium")
 
+    async def set_session_mode(self, session_id: str, mode: str) -> None:
+        """
+        Set session control mode (called by CollaborationManager)
 
-# Singleton instance
-escalation_manager = EscalationManager()
+        Args:
+            session_id: Session identifier
+            mode: Control mode ('human_control' or 'agent_control')
+        """
+        logger.info(f"Session {session_id} mode set to: {mode}")
+        # This can be extended to update session state in database
+        # For now, just log the mode change
+
+    async def initialize_collaboration(
+        self,
+        session_id: str,
+        mode: CollaborationMode = CollaborationMode.AUTO,
+    ) -> None:
+        """
+        Initialize collaboration for a session
+
+        Args:
+            session_id: Session identifier
+            mode: Initial collaboration mode
+        """
+        if not self.collaboration_manager:
+            logger.warning("CollaborationManager not initialized")
+            return
+
+        await self.collaboration_manager.initialize_session(session_id, mode)
+        logger.info(f"Collaboration initialized for session {session_id} in {mode.value} mode")
+
+    async def handle_human_command(
+        self, session_id: str, command_data: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """
+        Handle command from human operator
+
+        Args:
+            session_id: Session identifier
+            command_data: Command data from human
+
+        Returns:
+            Command execution result
+        """
+        if not self.collaboration_manager:
+            return {
+                "status": "error",
+                "error": "CollaborationManager not initialized",
+            }
+
+        return await self.collaboration_manager.handle_human_command(
+            session_id, command_data
+        )
+
+    async def cleanup_collaboration(self, session_id: str) -> None:
+        """
+        Cleanup collaboration state for a session
+
+        Args:
+            session_id: Session identifier
+        """
+        if self.collaboration_manager:
+            await self.collaboration_manager.cleanup_session(session_id)
+            logger.debug(f"Collaboration cleaned up for session {session_id}")
+
+
+# Singleton instance (will be initialized with WebSocket when available)
+escalation_manager: Optional[EscalationManager] = None
+
+
+def get_escalation_manager(
+    websocket_client: Optional[WebSocketClient] = None,
+    enable_collaboration: bool = True,
+) -> EscalationManager:
+    """
+    Get or create EscalationManager singleton with optional collaboration support
+
+    Args:
+        websocket_client: WebSocket client for collaboration features
+        enable_collaboration: Whether to enable collaboration features
+
+    Returns:
+        EscalationManager instance
+    """
+    global escalation_manager
+
+    if escalation_manager is None:
+        escalation_manager = EscalationManager(
+            websocket_client=websocket_client,
+            enable_collaboration=enable_collaboration,
+        )
+    elif enable_collaboration and not escalation_manager.collaboration_manager and websocket_client:
+        # Initialize collaboration if not already done
+        escalation_manager.collaboration_manager = CollaborationManager(
+            websocket_client=websocket_client,
+            escalation_manager=escalation_manager,
+        )
+        logger.info("CollaborationManager initialized on existing EscalationManager")
+
+    return escalation_manager
 
 
 async def evaluate_escalation_need(
@@ -370,14 +488,16 @@ async def evaluate_escalation_need(
     Returns:
         EscalationDecision
     """
-    return await escalation_manager.evaluate_escalation(
+    manager = get_escalation_manager()
+    return await manager.evaluate_escalation(
         session_id, intent_result, conversation_state, user_sentiment
     )
 
 
 async def get_fallback_response(session_id: str, reason: EscalationReason) -> str:
     """Get fallback response"""
-    return await escalation_manager.generate_fallback_response(session_id, reason)
+    manager = get_escalation_manager()
+    return await manager.generate_fallback_response(session_id, reason)
 
 
 # Export
@@ -385,6 +505,7 @@ __all__ = [
     "EscalationManager",
     "EscalationDecision",
     "EscalationReason",
+    "get_escalation_manager",
     "evaluate_escalation_need",
     "get_fallback_response",
 ]

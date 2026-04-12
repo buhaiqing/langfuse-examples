@@ -49,6 +49,7 @@ class FeedbackCollector:
         user_id: Optional[str] = None,
         comment: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
+        send_to_langfuse: bool = True,
     ) -> Feedback:
         """
         Record a positive feedback signal.
@@ -58,6 +59,7 @@ class FeedbackCollector:
             user_id: Optional user identifier.
             comment: Optional feedback comment.
             metadata: Optional additional metadata.
+            send_to_langfuse: Whether to send feedback to Langfuse.
 
         Returns:
             Created Feedback instance.
@@ -71,6 +73,23 @@ class FeedbackCollector:
             metadata=metadata or {},
         )
         self._feedback.append(feedback)
+
+        # Send to Langfuse if enabled
+        if send_to_langfuse:
+            try:
+                from src.observability.langfuse_client import get_observer
+                observer = get_observer()
+                observer.record_feedback_to_langfuse(
+                    trace_id=trace_id,
+                    feedback_type=FeedbackType.ACCEPT,
+                    value=1,
+                    user_id=user_id,
+                    comment=comment,
+                    metadata=metadata,
+                )
+            except Exception as e:
+                print(f"Failed to send acceptance to Langfuse: {e}")
+
         return feedback
 
     def record_rejection(
@@ -80,6 +99,7 @@ class FeedbackCollector:
         reason: Optional[str] = None,
         comment: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
+        send_to_langfuse: bool = True,
     ) -> Feedback:
         """
         Record a negative feedback signal.
@@ -90,6 +110,7 @@ class FeedbackCollector:
             reason: Optional rejection reason.
             comment: Optional detailed comment.
             metadata: Optional additional metadata.
+            send_to_langfuse: Whether to send feedback to Langfuse.
 
         Returns:
             Created Feedback instance.
@@ -107,6 +128,23 @@ class FeedbackCollector:
             metadata=fb_metadata,
         )
         self._feedback.append(feedback)
+
+        # Send to Langfuse if enabled
+        if send_to_langfuse:
+            try:
+                from src.observability.langfuse_client import get_observer
+                observer = get_observer()
+                observer.record_feedback_to_langfuse(
+                    trace_id=trace_id,
+                    feedback_type=FeedbackType.REJECT,
+                    value=0,
+                    user_id=user_id,
+                    comment=comment,
+                    metadata=fb_metadata,
+                )
+            except Exception as e:
+                print(f"Failed to send rejection to Langfuse: {e}")
+
         return feedback
 
     def record_rating(
@@ -117,6 +155,7 @@ class FeedbackCollector:
         comment: Optional[str] = None,
         scale: int = 5,
         metadata: Optional[dict[str, Any]] = None,
+        send_to_langfuse: bool = True,
     ) -> Feedback:
         """
         Record a rating score.
@@ -128,6 +167,7 @@ class FeedbackCollector:
             comment: Optional comment.
             scale: Maximum rating value (default 5).
             metadata: Optional additional metadata.
+            send_to_langfuse: Whether to send feedback to Langfuse.
 
         Returns:
             Created Feedback instance.
@@ -144,6 +184,23 @@ class FeedbackCollector:
             },
         )
         self._feedback.append(feedback)
+
+        # Send to Langfuse if enabled
+        if send_to_langfuse:
+            try:
+                from src.observability.langfuse_client import get_observer
+                observer = get_observer()
+                observer.record_feedback_to_langfuse(
+                    trace_id=trace_id,
+                    feedback_type=FeedbackType.RATING,
+                    value=rating,
+                    user_id=user_id,
+                    comment=comment,
+                    metadata={**(metadata or {}), "scale": scale},
+                )
+            except Exception as e:
+                print(f"Failed to send rating to Langfuse: {e}")
+
         return feedback
 
     def record_comment(
@@ -152,6 +209,7 @@ class FeedbackCollector:
         comment: str,
         user_id: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
+        send_to_langfuse: bool = True,
     ) -> Feedback:
         """
         Record a text comment without score.
@@ -161,6 +219,7 @@ class FeedbackCollector:
             comment: Comment text.
             user_id: Optional user identifier.
             metadata: Optional additional metadata.
+            send_to_langfuse: Whether to send feedback to Langfuse.
 
         Returns:
             Created Feedback instance.
@@ -174,6 +233,23 @@ class FeedbackCollector:
             metadata=metadata or {},
         )
         self._feedback.append(feedback)
+
+        # Send to Langfuse if enabled
+        if send_to_langfuse:
+            try:
+                from src.observability.langfuse_client import get_observer
+                observer = get_observer()
+                observer.record_feedback_to_langfuse(
+                    trace_id=trace_id,
+                    feedback_type=FeedbackType.COMMENT,
+                    value=None,
+                    user_id=user_id,
+                    comment=comment,
+                    metadata=metadata,
+                )
+            except Exception as e:
+                print(f"Failed to send comment to Langfuse: {e}")
+
         return feedback
 
     def get_feedback_for_trace(self, trace_id: str) -> list[Feedback]:
@@ -264,9 +340,10 @@ def record_acceptance(
     trace_id: str,
     user_id: Optional[str] = None,
     comment: Optional[str] = None,
+    send_to_langfuse: bool = True,
 ) -> Feedback:
     """Record acceptance feedback."""
-    return get_feedback_collector().record_acceptance(trace_id, user_id, comment)
+    return get_feedback_collector().record_acceptance(trace_id, user_id, comment, send_to_langfuse=send_to_langfuse)
 
 
 def record_rejection(
@@ -274,9 +351,10 @@ def record_rejection(
     user_id: Optional[str] = None,
     reason: Optional[str] = None,
     comment: Optional[str] = None,
+    send_to_langfuse: bool = True,
 ) -> Feedback:
     """Record rejection feedback."""
-    return get_feedback_collector().record_rejection(trace_id, user_id, reason, comment)
+    return get_feedback_collector().record_rejection(trace_id, user_id, reason, comment, send_to_langfuse=send_to_langfuse)
 
 
 def record_rating(
@@ -284,18 +362,20 @@ def record_rating(
     rating: int,
     user_id: Optional[str] = None,
     comment: Optional[str] = None,
+    send_to_langfuse: bool = True,
 ) -> Feedback:
     """Record rating feedback."""
-    return get_feedback_collector().record_rating(trace_id, rating, user_id, comment)
+    return get_feedback_collector().record_rating(trace_id, rating, user_id, comment, send_to_langfuse=send_to_langfuse)
 
 
 def record_comment(
     trace_id: str,
     comment: str,
     user_id: Optional[str] = None,
+    send_to_langfuse: bool = True,
 ) -> Feedback:
     """Record comment feedback."""
-    return get_feedback_collector().record_comment(trace_id, comment, user_id)
+    return get_feedback_collector().record_comment(trace_id, comment, user_id, send_to_langfuse=send_to_langfuse)
 
 
 def get_acceptance_rate() -> float:

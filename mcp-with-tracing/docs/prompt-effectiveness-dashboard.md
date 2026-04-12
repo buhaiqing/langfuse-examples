@@ -51,6 +51,8 @@ set_active_prompt_version("customer-support-prompt", "v2.0")
 
 ### 2. 在追踪中注入版本信息
 
+#### 方法 1: 使用 propagate_attributes
+
 ```python
 from src.observability import get_active_prompt_version
 from langfuse import propagate_attributes
@@ -68,11 +70,12 @@ with propagate_attributes(
     response = call_llm(prompt)
 ```
 
-### 3. 使用装饰器自动附加版本
+#### 方法 2: 使用 track_prompt_version 装饰器
 
 ```python
 from src.observability import track_prompt_version
 
+# 指定版本
 @mcp.tool()
 @track_prompt_version(
     prompt_id="customer-support-prompt",
@@ -81,6 +84,66 @@ from src.observability import track_prompt_version
 def respond_to_customer(query: str) -> str:
     # 自动附加 prompt_id 和 version 到追踪
     return generate_response(query)
+
+# 使用活跃版本（推荐）
+@mcp.tool()
+@track_prompt_version(prompt_id="customer-support-prompt")
+def respond_to_customer_v2(query: str) -> str:
+    # 自动获取并使用当前活跃版本
+    return generate_response(query)
+```
+
+#### 方法 3: 使用 LangfuseObserver
+
+```python
+from src.observability.langfuse_client import get_observer
+
+observer = get_observer()
+
+with observer.trace_tool_call(
+    tool_name="llm_tool",
+    input_args={"query": "test"},
+    prompt_version="v2.0",
+    prompt_id="customer-support-prompt",
+) as obs:
+    result = call_llm(prompt)
+    if obs:
+        obs.update(output=result)
+```
+
+### 3. 使用装饰器自动附加版本
+
+**注意**: `track_prompt_version` 装饰器已更新，现在支持自动获取活跃版本。
+
+```python
+from src.observability import track_prompt_version
+
+@mcp.tool()
+@track_prompt_version(
+    prompt_id="customer-support-prompt",
+    version="v2.0"  # 可选，不指定则使用活跃版本
+)
+def respond_to_customer(query: str) -> str:
+    # 自动附加 prompt_id 和 version 到追踪
+    return generate_response(query)
+```
+
+### 4. 查询和比较版本
+
+使用命令行工具查询版本信息：
+
+```bash
+# 列出所有提示词及其版本
+python scripts/query_prompt_versions.py
+
+# 列出特定提示词的版本
+python scripts/query_prompt_versions.py list customer-support-prompt
+
+# 比较两个版本（A/B 测试）
+python scripts/query_prompt_versions.py compare customer-support-prompt v1.0 v2.0
+
+# 查看版本性能指标
+python scripts/query_prompt_versions.py performance customer-support-prompt v1.0
 ```
 
 ## Langfuse 仪表板配置

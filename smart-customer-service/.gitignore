@@ -147,3 +147,4 @@ uv.lock
 tmp/
 temp/
 smart-customer-service/frontend/node_modules/
+.DS_Store

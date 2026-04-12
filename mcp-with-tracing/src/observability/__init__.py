@@ -15,6 +15,30 @@ from src.observability.session import (
     clear_session,
 )
 from src.observability.decorators import observe_tool, track_session, track_prompt_version
+from src.observability.alerting import (
+    AlertManager,
+    AlertRule,
+    Alert,
+    AlertSeverity,
+    AlertChannel,
+    get_alert_manager,
+    configure_success_rate_alert,
+    configure_latency_alert,
+    check_success_rate,
+    check_latency,
+)
+from src.observability.feedback import (
+    FeedbackCollector,
+    FeedbackType,
+    Feedback,
+    get_feedback_collector,
+    record_acceptance,
+    record_rejection,
+    record_rating,
+    record_comment,
+    get_acceptance_rate,
+    get_feedback_statistics,
+)
 
 __all__ = [
     "ObservabilityConfig",
@@ -28,4 +52,24 @@ __all__ = [
     "observe_tool",
     "track_session",
     "track_prompt_version",
+    "AlertManager",
+    "AlertRule",
+    "Alert",
+    "AlertSeverity",
+    "AlertChannel",
+    "get_alert_manager",
+    "configure_success_rate_alert",
+    "configure_latency_alert",
+    "check_success_rate",
+    "check_latency",
+    "FeedbackCollector",
+    "FeedbackType",
+    "Feedback",
+    "get_feedback_collector",
+    "record_acceptance",
+    "record_rejection",
+    "record_rating",
+    "record_comment",
+    "get_acceptance_rate",
+    "get_feedback_statistics",
 ]

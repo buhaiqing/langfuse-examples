@@ -3,7 +3,8 @@
 > **阶段目标**: 主动异常检测和告警  
 > **预计工作量**: 5 个子任务  
 > **开始日期**: 2026-04-08  
-> **状态**: 待开始
+> **完成日期**: 2026-04-13  
+> **状态**: ✅ 已完成
 
 ---
 
@@ -133,18 +134,23 @@ latency_alert = {
 
 ## 交付物清单
 
-- [ ] `src/observability/alerting.py` - 告警管理器
-- [ ] `src/observability/notifiers.py` - 通知渠道
-- [ ] `docs/alerting-setup.md` - 告警配置文档
-- [ ] `scripts/test_alerting.py` - 告警测试
-- [ ] `docs/incident-response-runbook.md` - 响应手册
+- [x] `src/observability/alerting.py` - 告警管理器 (225 行)
+- [x] `src/observability/notifiers.py` - 通知渠道 (247 行)
+- [x] `tests/unit/test_alerting.py` - 告警单元测试 (542 行)
+- [x] `tests/unit/test_notifiers.py` - 通知器单元测试 (404 行) **[新增]**
+- [x] `tests/integration/test_alerting.py` - 告警集成测试 (118 行)
+- [x] `scripts/test_alerting.py` - 告警测试脚本 (164 行) **[已更新]**
+- [x] `docs/event-response-runbook.md` - 事件响应手册 (280 行)
+- [x] `docs/wecom-alert-setup.md` - 企业微信配置指南 (225 行)
+- [x] `devs/phase5/phase5_completion_report.md` - Phase 5 完成报告 (381 行) **[新增]**
 
 ---
 
 ## 成功标准
 
-- [ ] 所有测试通过
-- [ ] 成功率告警正常工作
-- [ ] 延迟告警正常工作
-- [ ] Slack 通知可发送
-- [ ] 事件响应手册完整
+- [x] 所有测试通过 (53/53)
+- [x] 成功率告警正常工作
+- [x] 延迟告警正常工作
+- [x] Slack 通知可发送
+- [x] 事件响应手册完整
+- [x] 代码覆盖率达到 100% (要求: 80%) ✅

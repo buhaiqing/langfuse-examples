@@ -33,7 +33,8 @@ class TestObservabilityConfig:
 
     def test_is_configured_empty(self):
         """Test is_configured with empty credentials."""
-        config = ObservabilityConfig()
+        # Create config with explicitly empty keys (ignoring env vars)
+        config = ObservabilityConfig(langfuse_public_key="", langfuse_secret_key="")
         assert config.is_configured() is False
 
     def test_is_configured_with_keys(self):
@@ -65,7 +66,12 @@ class TestInstrumentation:
 
     def test_init_observability_no_credentials(self):
         """Test initialization without credentials."""
-        config = ObservabilityConfig()
+        # Create config with explicitly empty keys
+        config = ObservabilityConfig(
+            langfuse_public_key="",
+            langfuse_secret_key="",
+            enabled=True,
+        )
         result = init_observability(config)
         assert result is None
 

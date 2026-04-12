@@ -10,6 +10,12 @@ from src.observability import (
     observe_tool,
     set_session_context,
 )
+from src.tools.feedback_tool import (
+    submit_feedback_accept,
+    submit_feedback_reject,
+    submit_feedback_rating,
+    submit_feedback_comment,
+)
 
 mcp = FastMCP("MCP Langfuse Observability Server")
 
@@ -68,6 +74,13 @@ def greet(name: str, language: str = "en") -> str:
         "fr": f"Bonjour, {name}!",
     }
     return greetings.get(language, f"Hello, {name}!")
+
+
+# Register feedback tools
+mcp.add_tool(submit_feedback_accept)
+mcp.add_tool(submit_feedback_reject)
+mcp.add_tool(submit_feedback_rating)
+mcp.add_tool(submit_feedback_comment)
 
 
 def main():

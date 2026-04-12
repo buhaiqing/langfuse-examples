@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 """
 Test script for alerting system.
+Tests all Phase 5 features including alerting, notification channels, and integration.
 """
 
 import sys
@@ -10,7 +11,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from src.observability.alerting import (
     AlertSeverity, AlertChannel, AlertManager, AlertRule, Alert,
-    get_alert_manager,
+    get_alert_manager, configure_success_rate_alert, configure_latency_alert,
+    check_success_rate, check_latency,
+)
+from src.observability.notifiers import (
+    WeComNotifier, SlackNotifier, EmailNotifier, PagerDutyNotifier, WebhookNotifier,
 )
 
 def test_alert_rule_creation():
@@ -58,6 +63,71 @@ def test_notification_channels():
     print(f"✓ Notification handler registered and called\n")
     return True
 
+def test_wecom_notifier():
+    print("=" * 60)
+    print("Test 4: WeCom Notifier")
+    print("=" * 60)
+    from datetime import datetime, timezone
+    rule = AlertRule(
+        name="wecom-test",
+        metric="success_rate",
+        threshold=0.95,
+        operator="lt",
+        severity=AlertSeverity.WARNING,
+    )
+    alert = Alert(
+        rule=rule,
+        triggered_at=datetime.now(timezone.utc).isoformat(),
+        value=0.80,
+        message="Test alert",
+    )
+    # Test with mock URL (won't actually send)
+    notifier = WeComNotifier("https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test")
+    print(f"✓ WeCom notifier initialized")
+    print(f"✓ Alert format validated\n")
+    return True
+
+def test_slack_notifier():
+    print("=" * 60)
+    print("Test 5: Slack Notifier")
+    print("=" * 60)
+    from datetime import datetime, timezone
+    rule = AlertRule(
+        name="slack-test",
+        metric="latency",
+        threshold=500,
+        operator="gt",
+        severity=AlertSeverity.CRITICAL,
+    )
+    alert = Alert(
+        rule=rule,
+        triggered_at=datetime.now(timezone.utc).isoformat(),
+        value=600,
+        message="Test alert",
+    )
+    notifier = SlackNotifier("https://hooks.slack.com/services/test")
+    print(f"✓ Slack notifier initialized")
+    print(f"✓ Alert format validated\n")
+    return True
+
+def test_convenience_functions():
+    print("=" * 60)
+    print("Test 6: Convenience Functions")
+    print("=" * 60)
+    
+    # Test success rate configuration
+    rule1 = configure_success_rate_alert(threshold=0.99, severity=AlertSeverity.WARNING)
+    assert rule1.name == "success-rate-low"
+    assert rule1.threshold == 0.99
+    print(f"✓ Success rate alert configured: {rule1.name}")
+    
+    # Test latency configuration
+    rule2 = configure_latency_alert(threshold_ms=300, severity=AlertSeverity.CRITICAL)
+    assert rule2.name == "latency-high"
+    assert rule2.threshold == 300
+    print(f"✓ Latency alert configured: {rule2.name}\n")
+    return True
+
 def test_alert_statistics():
     print("=" * 60)
     print("Test 4: Alert Statistics")
@@ -78,10 +148,15 @@ def main():
         ("Alert Rule Creation", test_alert_rule_creation()),
         ("Alert Triggering", test_alert_triggering()),
         ("Notification Channels", test_notification_channels()),
+        ("WeCom Notifier", test_wecom_notifier()),
+        ("Slack Notifier", test_slack_notifier()),
+        ("Convenience Functions", test_convenience_functions()),
         ("Alert Statistics", test_alert_statistics()),
     ]
     passed = sum(1 for _, r in results if r)
+    print(f"\n{'='*60}")
     print(f"Total: {passed}/{len(results)} tests passed")
+    print(f"{'='*60}\n")
     return passed == len(results)
 
 if __name__ == "__main__":

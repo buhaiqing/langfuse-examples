@@ -143,3 +143,4 @@ cython_debug/
 .lancedb/
 
 smart-customer-service/frontend/node_modules/
+.DS_Store
