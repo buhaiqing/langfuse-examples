@@ -39,6 +39,9 @@ from src.observability.feedback import (
     get_acceptance_rate,
     get_feedback_statistics,
 )
+from src.observability.smart_alerting import SmartAlertManager
+from src.observability.anomaly_detector import AnomalyDetector
+from src.observability.metrics_collector import MetricsCollector
 
 __all__ = [
     "ObservabilityConfig",
@@ -72,4 +75,7 @@ __all__ = [
     "record_comment",
     "get_acceptance_rate",
     "get_feedback_statistics",
+    "SmartAlertManager",
+    "AnomalyDetector",
+    "MetricsCollector",
 ]
