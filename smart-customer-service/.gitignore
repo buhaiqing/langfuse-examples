@@ -146,3 +146,4 @@ uv.lock
 *.log
 tmp/
 temp/
+smart-customer-service/frontend/node_modules/

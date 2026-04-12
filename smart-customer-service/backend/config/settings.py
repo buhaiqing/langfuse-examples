@@ -29,6 +29,27 @@ LOG_LEVEL = os.getenv("LOG_LEVEL", "INFO")
 LANGFUSE_FLUSH_AT = int(os.getenv("LANGFUSE_FLUSH_AT", "50"))
 LANGFUSE_FLUSH_INTERVAL = int(os.getenv("LANGFUSE_FLUSH_INTERVAL", "5"))
 
+# External API Configuration (for Tool Calling)
+TICKET_API_URL = os.getenv("TICKET_API_URL", "")
+TICKET_API_KEY = os.getenv("TICKET_API_KEY", "")
+PRODUCT_API_URL = os.getenv("PRODUCT_API_URL", "")
+PRODUCT_API_KEY = os.getenv("PRODUCT_API_KEY", "")
+ACCOUNT_API_URL = os.getenv("ACCOUNT_API_URL", "")
+ACCOUNT_API_KEY = os.getenv("ACCOUNT_API_KEY", "")
+
+# Human Agent Notification (webhook URL)
+HUMAN_AGENT_WEBHOOK_URL = os.getenv("HUMAN_AGENT_WEBHOOK_URL", "")
+HUMAN_AGENT_WEBHOOK_SECRET = os.getenv("HUMAN_AGENT_WEBHOOK_SECRET", "")
+
+# Sentiment Analysis Service
+SENTIMENT_API_URL = os.getenv("SENTIMENT_API_URL", "")
+SENTIMENT_API_KEY = os.getenv("SENTIMENT_API_KEY", "")
+SENTIMENT_USE_OPENAI = os.getenv("SENTIMENT_USE_OPENAI", "false").lower() == "true"
+
+# RAG Knowledge Base Configuration
+KNOWLEDGE_BASE_DIR = os.getenv("KNOWLEDGE_BASE_DIR", "")
+KNOWLEDGE_BASE_URLS = os.getenv("KNOWLEDGE_BASE_URLS", "")
+
 
 # Validate required configuration
 def validate_config():

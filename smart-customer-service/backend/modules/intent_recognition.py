@@ -11,8 +11,11 @@ from langchain_openai import ChatOpenAI
 from pydantic import BaseModel, Field
 
 from config.settings import OPENAI_API_KEY
+from core.logging_config import LogCategory, get_logger
 from core.scoring import score_intent_confidence
 from core.tracing import create_span, score_trace
+
+logger = get_logger(LogCategory.INTENT)
 
 
 class IntentResult(BaseModel):
@@ -42,7 +45,9 @@ class IntentRecognitionSystem:
     """Intent recognition system with Langfuse tracing"""
 
     def __init__(self):
+        logger.info("Initializing Intent Recognition System")
         self.llm = ChatOpenAI(model="gpt-3.5-turbo", temperature=0.2, api_key=OPENAI_API_KEY)
+        logger.debug("Created ChatOpenAI instance for intent classification")
         self.prompt = ChatPromptTemplate.from_messages(
             [
                 (
@@ -69,6 +74,7 @@ class IntentRecognitionSystem:
                 ("human", "{user_input}"),
             ]
         )
+        logger.info("Intent Recognition System initialized successfully")
 
     async def recognize_intent(
         self, user_message: str, session_id: str | None = None
@@ -84,30 +90,30 @@ class IntentRecognitionSystem:
             IntentResult with intent, confidence, slots, and entities
         """
         start_time = time.time()
+        logger.info(f"Recognizing intent for message: '{user_message[:50]}...' (session: {session_id})")
 
-        # Create main span for intent recognition
         with create_span(
             name="intent_recognition",
             input_data={"user_message": user_message},
             metadata={"session_id": session_id},
         ) as main_span:
 
-            # Step 1: Text preprocessing
             preprocess_span = create_span(
                 name="text_preprocessing", input_data={"raw_text": user_message}
             )
+            logger.debug("Preprocessing user input text")
             cleaned_text = self._preprocess_text(user_message)
             preprocess_span.end(
                 output_data={"cleaned_text": cleaned_text, "length": len(cleaned_text)}
             )
+            logger.debug(f"Text preprocessed: {len(cleaned_text)} chars")
 
-            # Step 2: Intent classification with LLM
             classification_span = create_span(
                 name="intent_classification",
                 input_data={"text": cleaned_text},
                 metadata={"model": "gpt-3.5-turbo", "temperature": 0.2},
             )
-
+            logger.debug("Classifying intent using LLM")
             intent_result = await self._classify_intent_llm(cleaned_text)
 
             classification_span.end(
@@ -117,31 +123,32 @@ class IntentRecognitionSystem:
                 },
                 metadata={"processing_time_ms": (time.time() - start_time) * 1000},
             )
+            logger.info(f"Intent classified: {intent_result.intent} (confidence: {intent_result.confidence:.2f})")
 
-            # Step 3: Slot extraction
             slot_span = create_span(
                 name="slot_extraction",
                 input_data={"text": cleaned_text, "intent": intent_result.intent},
             )
+            logger.debug("Extracting slots from text")
             slots = self._extract_slots(cleaned_text, intent_result.intent)
             slot_span.end(output_data={"slots": slots})
             intent_result.slots = slots
+            logger.debug(f"Extracted {len(slots)} slots: {list(slots.keys())}")
 
-            # Step 4: Named entity recognition
             ner_span = create_span(
                 name="named_entity_recognition", input_data={"text": cleaned_text}
             )
+            logger.debug("Recognizing named entities")
             entities = self._recognize_entities(cleaned_text)
             ner_span.end(output_data={"entities": entities})
             intent_result.entities = entities
+            logger.debug(f"Recognized {len(entities)} entities")
 
-            # Calculate overall quality score
             processing_time = (time.time() - start_time) * 1000
             quality_score = self._calculate_quality_score(
                 intent_result.confidence, len(slots), len(entities), processing_time
             )
 
-            # Add scores
             score_intent_confidence(
                 intent_result.confidence, comment=f"Intent: {intent_result.intent}"
             )
@@ -153,7 +160,6 @@ class IntentRecognitionSystem:
                 comment="Overall recognition quality score",
             )
 
-            # Update main span
             main_span.end(
                 output_data={
                     "intent": intent_result.intent,
@@ -162,6 +168,12 @@ class IntentRecognitionSystem:
                     "entities_count": len(entities),
                     "processing_time_ms": processing_time,
                 }
+            )
+
+            logger.info(
+                f"Intent recognition completed: {intent_result.intent}, "
+                f"confidence: {intent_result.confidence:.2f}, "
+                f"slots: {len(slots)}, entities: {len(entities)}, time: {processing_time:.0f}ms"
             )
 
             return intent_result

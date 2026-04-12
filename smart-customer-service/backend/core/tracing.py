@@ -103,13 +103,11 @@ def create_span(
         
         def __exit__(self, exc_type, exc_val, exc_tb):
             if exc_type:
-                # Handle exception
                 try:
-                    self.span.end(output_data={"error": str(exc_val)})
+                    self.end(output_data={"error": str(exc_val)})
                 except Exception:
                     pass
             else:
-                # Normal exit, span will be ended by the caller
                 pass
         
         def end(self, *args, **kwargs):
@@ -121,6 +119,15 @@ def create_span(
             except Exception:
                 # If any error occurs, just return None
                 return None
+        
+        def add_event(self, name: str, output_data: Any = None, **kwargs):
+            """Add event to the span"""
+            try:
+                if output_data is not None:
+                    kwargs['output'] = output_data
+                self.span.event(name=name, **kwargs)
+            except Exception:
+                pass
         
         def __getattr__(self, name):
             return getattr(self.span, name)
@@ -188,7 +195,10 @@ def add_event(
             output_data={"reason": "low_confidence"}
         )
     """
-    langfuse.event(name=name, input=input_data, output=output_data, metadata=metadata)
+    try:
+        langfuse.event(name=name, input=input_data, output=output_data, metadata=metadata)
+    except AttributeError:
+        pass
 
 
 def update_trace_metadata(metadata: dict[str, Any]):

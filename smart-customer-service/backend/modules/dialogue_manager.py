@@ -7,8 +7,11 @@ import time
 from dataclasses import dataclass, field
 from typing import Any
 
+from core.logging_config import LogCategory, get_logger
 from core.scoring import score_dialogue_coherence, score_slot_completion_rate
 from core.tracing import create_span
+
+logger = get_logger(LogCategory.DIALOGUE)
 
 
 @dataclass
@@ -29,8 +32,9 @@ class DialogueStateManager:
     """Manages conversation state with Langfuse tracing"""
 
     def __init__(self):
-        # In production, use Redis or database for persistence
+        logger.info("Initializing Dialogue State Manager")
         self.state_store: dict[str, ConversationState] = {}
+        logger.info(f"Dialogue State Manager initialized with {len(self.state_store)} sessions")
 
     async def update_state(
         self,
@@ -52,21 +56,21 @@ class DialogueStateManager:
             Updated conversation state
         """
         metadata = metadata or {}
+        logger.debug(f"Updating conversation state for session: {session_id}")
 
-        # Get or create session state
         if session_id not in self.state_store:
             self.state_store[session_id] = ConversationState(session_id=session_id)
+            logger.info(f"Created new conversation state for session: {session_id}")
 
         state = self.state_store[session_id]
+        logger.debug(f"Current turn count: {state.turn_count}")
 
-        # Create main span for state update
         with create_span(
             name="dialogue_state_update",
             input_data={"session_id": session_id, "turn_number": state.turn_count + 1},
             metadata={"current_intent": state.current_intent, "turn_count": state.turn_count},
         ) as main_span:
 
-            # Step 1: Update dialogue history
             history_span = create_span(
                 name="history_update",
                 input_data={"user_message": user_input, "bot_response": bot_response},
@@ -80,7 +84,6 @@ class DialogueStateManager:
                 {"role": "assistant", "content": bot_response, "timestamp": timestamp}
             )
 
-            # Keep only last 20 messages to manage context size
             if len(state.dialogue_history) > 20:
                 state.dialogue_history = state.dialogue_history[-20:]
 
@@ -88,8 +91,8 @@ class DialogueStateManager:
                 output_data={"history_length": len(state.dialogue_history)},
                 metadata={"max_history_length": 20},
             )
+            logger.debug(f"Updated dialogue history: {len(state.dialogue_history)} messages")
 
-            # Step 2: Update slots
             slot_span = create_span(
                 name="slot_accumulation",
                 input_data={
@@ -109,13 +112,12 @@ class DialogueStateManager:
                     "completion_rate": completion_rate,
                 }
             )
+            logger.debug(f"Slot completion rate: {completion_rate:.2%}")
 
-            # Score slot completion
             score_slot_completion_rate(
                 completion_rate, comment=f"Slot completion after turn {state.turn_count + 1}"
             )
 
-            # Step 3: Update context variables
             context_span = create_span(
                 name="context_update",
                 input_data={"context_updates": metadata.get("context_updates", {})},
@@ -124,25 +126,23 @@ class DialogueStateManager:
             context_updates = metadata.get("context_updates", {})
             state.context_variables.update(context_updates)
 
-            # Update intent if provided
             if metadata.get("intent"):
                 old_intent = state.current_intent
                 state.current_intent = metadata["intent"]
                 context_updates["intent_changed"] = old_intent != state.current_intent
+                logger.debug(f"Intent changed from {old_intent} to {state.current_intent}")
 
             context_span.end(output_data={"current_context": state.context_variables})
 
-            # Update turn count
             state.turn_count += 1
+            logger.debug(f"Turn count incremented to: {state.turn_count}")
 
-            # Calculate dialogue coherence
             coherence = self._evaluate_coherence(state)
             score_dialogue_coherence(coherence, comment=f"Turn {state.turn_count} coherence score")
+            logger.debug(f"Dialogue coherence score: {coherence:.2f}")
 
-            # Save state
             self.state_store[session_id] = state
 
-            # Update main span
             main_span.end(
                 output_data={
                     "turn_count": state.turn_count,
@@ -150,6 +150,12 @@ class DialogueStateManager:
                     "slots_count": len(state.collected_slots),
                     "coherence": coherence,
                 }
+            )
+
+            logger.info(
+                f"Conversation state updated: session={session_id}, "
+                f"turn={state.turn_count}, intent={state.current_intent}, "
+                f"slots={len(state.collected_slots)}, coherence={coherence:.2f}"
             )
 
             return state

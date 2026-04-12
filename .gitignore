@@ -141,3 +141,5 @@ cython_debug/
 .omc/
 .vscode/
 .lancedb/
+
+smart-customer-service/frontend/node_modules/

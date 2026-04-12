@@ -13,6 +13,7 @@ from modules.dialogue_manager import update_conversation_state
 from modules.escalation import evaluate_escalation_need, get_fallback_response
 from modules.intent_recognition import IntentResult, recognize_user_intent
 from modules.rag_knowledge import query_knowledge_base
+from modules.sentiment_analysis import analyze_sentiment
 from modules.tool_calling import ToolName, call_tool
 
 
@@ -266,23 +267,10 @@ class SmartCustomerService:
             result = await query_knowledge_base(slots.get('query', 'general question'), session_id)
             return result["answer"]
 
-    def _analyze_sentiment(self, text: str) -> float:
-        """Simple sentiment analysis (mock implementation)"""
-        negative_words = ["糟糕", "失望", "愤怒", "不满", "差劲", "terrible", "angry", "frustrated"]
-        positive_words = ["很好", "满意", "感谢", "excellent", "great", "thanks"]
-
-        text_lower = text.lower()
-
-        negative_count = sum(1 for word in negative_words if word in text_lower)
-        positive_count = sum(1 for word in positive_words if word in text_lower)
-
-        # Simple sentiment score (-1 to 1)
-        if negative_count > positive_count:
-            return -0.8
-        elif positive_count > negative_count:
-            return 0.8
-        else:
-            return 0.0
+    async def _analyze_sentiment(self, text: str) -> float:
+        """Analyze user sentiment using the sentiment analysis service"""
+        result = await analyze_sentiment(text)
+        return result.score
 
     def _check_if_resolved(self, intent_result: IntentResult, response: str) -> bool:
         """Check if the issue is likely resolved (simplified logic)"""
