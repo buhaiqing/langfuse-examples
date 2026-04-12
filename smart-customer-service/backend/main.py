@@ -202,6 +202,9 @@ class SmartCustomerService:
 
             error_response = "抱歉，系统遇到了一些问题。请稍后重试或联系人工客服。"
 
+            # Calculate processing time
+            processing_time = (time.time() - start_time) * 1000
+
             # Update state
             await update_conversation_state(
                 session_id=session_id,
@@ -216,6 +219,7 @@ class SmartCustomerService:
                 "error": str(e),
                 "escalated": True,
                 "session_id": session_id,
+                "processing_time_ms": processing_time,
             }
 
     async def _process_by_intent(self, intent_result: IntentResult, session_id: str) -> str:
@@ -254,12 +258,12 @@ class SmartCustomerService:
 
         elif intent == "general_inquiry":
             # General inquiry - use RAG
-            result = await query_knowledge_base(user_message, session_id)
+            result = await query_knowledge_base(slots.get('query', 'general question'), session_id)
             return result["answer"]
 
         else:
             # Default to RAG for other intents
-            result = await query_knowledge_base(user_message, session_id)
+            result = await query_knowledge_base(slots.get('query', 'general question'), session_id)
             return result["answer"]
 
     def _analyze_sentiment(self, text: str) -> float:
@@ -382,8 +386,66 @@ if __name__ == "__main__":
 
     load_dotenv()
 
-    if not os.getenv("OPENAI_API_KEY"):
+    if not os.getenv("OPENAI_API_KEY") or os.getenv("OPENAI_API_KEY") == "sk-placeholder":
         print("Warning: OPENAI_API_KEY not set. Using mock responses.")
-        # For demo without API key, you can modify the code to use mock responses
+        # 模拟实现
+        class MockRAG:
+            async def query_knowledge_base(self, query, session_id=None):
+                return {
+                    "answer": f"模拟回答: {query}",
+                    "retrieved_documents": [
+                        {
+                            "doc_id": "mock_doc_1",
+                            "content_preview": "模拟文档内容",
+                            "relevance_score": 0.95,
+                            "metadata": {}
+                        }
+                    ],
+                    "processing_time_ms": 150.5
+                }
+
+        class MockTool:
+            async def call_tool(self, tool_name, arguments):
+                return {
+                    "success": True,
+                    "result": {
+                        "ticket_id": arguments.get("ticket_id", "TKT-12345"),
+                        "status": "in_progress",
+                        "priority": "high",
+                        "assigned_to": "John Smith",
+                        "last_updated": "2026-04-08T14:20:00Z",
+                        "product_id": arguments.get("product_id", "PROD-001"),
+                        "name": "Enterprise API Plan",
+                        "version": "v2.3",
+                        "account_id": arguments.get("account_id", "ACC-12345"),
+                        "plan": "professional",
+                        "status": "active"
+                    },
+                    "execution_time_ms": 100.2
+                }
+
+        class MockIntent:
+            async def recognize_user_intent(self, user_message, session_id=None):
+                from modules.intent_recognition import IntentResult
+                # 简单的意图识别模拟
+                if "403" in user_message:
+                    return IntentResult(intent="api_error_troubleshooting", confidence=0.9, slots={"error_code": "403"}, entities=[])
+                elif "工单" in user_message or "ticket" in user_message:
+                    return IntentResult(intent="ticket_status_query", confidence=0.9, slots={"ticket_id": "TKT-12345"}, entities=[])
+                else:
+                    return IntentResult(intent="general_inquiry", confidence=0.8, slots={}, entities=[])
+
+        # 替换导入的函数
+        import modules.rag_knowledge
+        import modules.tool_calling
+        import modules.intent_recognition
+
+        mock_rag = MockRAG()
+        mock_tool = MockTool()
+        mock_intent = MockIntent()
+
+        modules.rag_knowledge.query_knowledge_base = mock_rag.query_knowledge_base
+        modules.tool_calling.call_tool = mock_tool.call_tool
+        modules.intent_recognition.recognize_user_intent = mock_intent.recognize_user_intent
 
     asyncio.run(main())

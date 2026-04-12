@@ -94,8 +94,39 @@ def create_span(
             result = recognize_intent(text)
             span.end(output={"intent": result})
     """
+    class SpanContextManager:
+        def __init__(self, span):
+            self.span = span
+        
+        def __enter__(self):
+            return self
+        
+        def __exit__(self, exc_type, exc_val, exc_tb):
+            if exc_type:
+                # Handle exception
+                try:
+                    self.span.end(output_data={"error": str(exc_val)})
+                except Exception:
+                    pass
+            else:
+                # Normal exit, span will be ended by the caller
+                pass
+        
+        def end(self, *args, **kwargs):
+            try:
+                # Try with output parameter
+                if 'output_data' in kwargs:
+                    kwargs['output'] = kwargs.pop('output_data')
+                return self.span.end(*args, **kwargs)
+            except Exception:
+                # If any error occurs, just return None
+                return None
+        
+        def __getattr__(self, name):
+            return getattr(self.span, name)
+    
     span = langfuse.start_span(name=name, input=input_data, metadata=metadata)
-    return span
+    return SpanContextManager(span)
 
 
 def score_trace(

@@ -86,40 +86,40 @@ check-all: lint format type-check test
 # Testing
 test:
 	@echo "Running tests..."
-	uv run pytest tests/
+	uv run pytest backend/tests/
 
 test-cov:
 	@echo "Running tests with coverage..."
-	uv run pytest tests/ --cov=. --cov-report=term-missing --cov-report=html
+	uv run pytest backend/tests/ --cov=. --cov-report=term-missing --cov-report=html
 
 test-watch:
 	@echo "Running tests in watch mode (Ctrl+C to exit)..."
-	uv run ptw tests/
+	uv run ptw backend/tests/
 
 # Running Examples
 verify:
 	@echo "Verifying project setup..."
-	uv run python verify_setup.py
+	uv run python backend/verify_setup.py
 
 run-basic:
 	@echo "Running basic tracing example..."
-	uv run python examples/basic_tracing.py
+	uv run python backend/examples/basic_tracing.py
 
 run-demo:
 	@echo "Running full customer service demo..."
-	uv run python main.py
+	uv run python backend/main.py
 
 run-tech:
 	@echo "Running tech support demo..."
-	uv run python examples/tech_support_demo.py
+	uv run python backend/examples/tech_support_demo.py
 
 run-failure:
 	@echo "Running failure analysis demo..."
-	uv run python examples/failure_analysis_demo.py
+	uv run python backend/examples/failure_analysis_demo.py
 
 run-dashboard:
 	@echo "Running dashboard example..."
-	uv run python examples/dashboard_example.py
+	uv run python backend/examples/dashboard_example.py
 
 # Maintenance
 clean:
