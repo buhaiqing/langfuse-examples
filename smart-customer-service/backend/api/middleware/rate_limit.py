@@ -5,7 +5,8 @@
 """
 
 import time
-from typing import Optional, Dict, Tuple
+import asyncio
+from typing import Optional, Dict, Tuple, Any
 from functools import lru_cache
 
 from fastapi import Request
@@ -34,6 +35,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
         self.excluded_paths = excluded_paths or {"/health", "/docs", "/redoc"}
         # 内存中的限流计数器（生产环境应使用 Redis）
         self._request_counts: Dict[str, Tuple[int, float]] = {}
+        # 最大条目数（防止内存泄漏）
+        self._max_entries = 10000
+        # 启动后台清理任务
+        asyncio.create_task(self._cleanup_loop())
 
     async def dispatch(self, request: Request, call_next):
         """处理请求限流"""
@@ -153,6 +158,31 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
 
         return True, 0
 
+    async def _cleanup_loop(self):
+        """后台清理循环（每 60 秒清理一次）"""
+        while True:
+            await asyncio.sleep(60)
+            self.cleanup_old_entries()
+
+            # 如果条目数超过上限，强制清理
+            if len(self._request_counts) > self._max_entries:
+                self._force_cleanup()
+                logger.warning(
+                    f"限流计数器条目数超过上限 ({len(self._request_counts)}/{self._max_entries})，已强制清理"
+                )
+
+    def _force_cleanup(self):
+        """强制清理过期条目"""
+        current_time = time.time()
+        cutoff_time = current_time - self.rate_limit_seconds
+
+        # 删除所有过期条目
+        self._request_counts = {
+            client_id: (count, window_start)
+            for client_id, (count, window_start) in self._request_counts.items()
+            if current_time - window_start < cutoff_time
+        }
+
     def cleanup_old_entries(self):
         """清理过期的限流记录（定期调用）"""
         current_time = time.time()
@@ -165,6 +195,10 @@ class RateLimitMiddleware(BaseHTTPMiddleware):
             for client_id, (count, window_start) in self._request_counts.items()
             if window_start > cutoff_time
         }
+
+        # 也清理超过上限的条目
+        if len(self._request_counts) > self._max_entries:
+            self._force_cleanup()
 
 
 # 限流装饰器（用于特定路由的限流）

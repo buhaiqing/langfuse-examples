@@ -5,9 +5,11 @@
 """
 
 from functools import lru_cache
-from typing import Optional, List
+from typing import Optional, List, Any
+import secrets
+import os
 
-from pydantic import Field, field_validator
+from pydantic import Field, field_validator, ValidationError
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -49,6 +51,30 @@ class Settings(BaseSettings):
     redis_password: Optional[str] = Field(default=None, description="Redis 密码")
     redis_ttl_hours: int = Field(default=24, description="会话 TTL(小时)")
     redis_url: Optional[str] = Field(default=None, description="Redis URL(优先级高于单独配置)")
+
+    # Redis 连接池配置
+    redis_max_connections: int = Field(default=100, description="Redis 最大连接数")
+    redis_min_idle_connections: int = Field(default=10, description="Redis 最小空闲连接数")
+    redis_connection_timeout: float = Field(default=30.0, description="Redis 连接超时 (秒)")
+    redis_socket_timeout: float = Field(default=5.0, description="Redis Socket 超时 (秒)")
+    redis_pool_enabled: bool = Field(default=True, description="是否启用 Redis 连接池")
+
+    # 降级策略配置
+    fallback_enabled: bool = Field(default=True, description="是否启用降级策略")
+    fallback_strategy: str = Field(
+        default="cache", description="降级策略 (cache/default_value/empty)"
+    )
+    fallback_default_value: Optional[Any] = Field(default=None, description="降级默认值")
+    fallback_cache_ttl: int = Field(default=300, description="降级缓存 TTL(秒)")
+
+    # 熔断器配置
+    circuit_breaker_enabled: bool = Field(default=True, description="是否启用熔断器")
+    circuit_breaker_failure_threshold: int = Field(default=5, description="熔断器失败阈值")
+    circuit_breaker_recovery_timeout: int = Field(default=30, description="熔断器恢复超时 (秒)")
+
+    # WebSocket 配置
+    websocket_max_connections: int = Field(default=1000, description="WebSocket 最大连接数")
+    websocket_heartbeat_timeout: int = Field(default=30, description="WebSocket 心跳超时 (秒)")
 
     @field_validator("redis_url", mode="before")
     @classmethod
@@ -105,13 +131,29 @@ class Settings(BaseSettings):
 
     # ==================== JWT 配置 ====================
     jwt_secret_key: str = Field(
-        default="your-secret-key-change-in-production", description="JWT 密钥"
+        default_factory=lambda: os.getenv("JWT_SECRET_KEY", ""),
+        description="JWT 密钥（至少32字符，必须从环境变量设置）"
     )
     jwt_algorithm: str = Field(default="HS256", description="JWT 算法")
     jwt_access_token_expire_minutes: int = Field(
         default=30, description="Access Token 过期时间 (分钟)"
     )
     jwt_refresh_token_expire_days: int = Field(default=7, description="Refresh Token 过期时间 (天)")
+
+    @field_validator("jwt_secret_key")
+    @classmethod
+    def validate_jwt_secret(cls, v: str) -> str:
+        """验证 JWT 密钥强度"""
+        if not v:
+            raise ValueError(
+                "JWT_SECRET_KEY 必须在环境变量中设置。"
+                "请生成一个安全的密钥，例如: openssl rand -hex 32"
+            )
+        if len(v) < 32:
+            raise ValueError(
+                f"JWT_SECRET_KEY 必须至少32字符，当前长度: {len(v)}"
+            )
+        return v
 
     # ==================== CORS 配置 ====================
     cors_origins: List[str] = Field(
@@ -133,9 +175,27 @@ class Settings(BaseSettings):
 
     # ==================== 认证配置 ====================
     api_key_header: str = Field(default="X-API-Key", description="API Key 头部名称")
-    service_api_keys: List[str] = Field(
-        default=["default-service-key"], description="服务间调用的 API Keys"
+    service_api_keys: str = Field(
+        default_factory=lambda: os.getenv("SERVICE_API_KEYS", ""),
+        description="服务间调用的 API Keys（逗号分隔，必须从环境变量设置）"
     )
+
+    @field_validator("service_api_keys")
+    @classmethod
+    def validate_service_api_keys(cls, v: str) -> List[str]:
+        """验证并解析 API Keys"""
+        if not v:
+            raise ValueError(
+                "SERVICE_API_KEYS 必须在环境变量中设置。"
+                "格式: sk-key1,sk-key2,sk-key3 (逗号分隔)"
+            )
+        keys = [key.strip() for key in v.split(",") if key.strip()]
+        if not keys:
+            raise ValueError("SERVICE_API_KEYS 不能为空")
+        for key in keys:
+            if len(key) < 16:
+                raise ValueError(f"API Key 必须至少16字符: {key[:4]}...")
+        return keys
 
     @property
     def is_development(self) -> bool:

@@ -1,6 +1,8 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { ConversationList } from './components/conversation-list';
 import { ConversationDetail } from './components/conversation-detail';
+import { AgentStatusManager, AgentStatus } from './components/agent-status';
+import { QuickReply } from './components/quick-reply';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Bell, Users, MessageSquare } from 'lucide-react';
@@ -10,8 +12,9 @@ import type { WebSocketMessage } from './lib/websocket';
 function App() {
   const [selectedSessionId, setSelectedSessionId] = useState<string | undefined>();
   const [pendingEscalations, setPendingEscalations] = useState(0);
+  const [agentStatus, setAgentStatus] = useState<AgentStatus>('online');
 
-  useEffect(() => {
+  useState(() => {
     wsClient.connect().catch(console.error);
     
     wsClient.on('escalation_request', handleEscalation);
@@ -31,6 +34,15 @@ function App() {
     console.log('收到新消息:', message);
   }
 
+  function handleInsertReply(content: string) {
+    // TODO: 将回复内容插入到会话详情的输入框
+    console.log('插入回复:', content);
+  }
+
+  function handleStatusChange(status: AgentStatus) {
+    console.log('状态变更:', status);
+  }
+
   return (
     <div className="h-screen flex flex-col">
       <header className="h-14 border-b flex items-center justify-between px-4 bg-background">
@@ -45,6 +57,15 @@ function App() {
         </div>
 
         <div className="flex items-center gap-4">
+          {/* 快捷回复 */}
+          <QuickReply onInsert={handleInsertReply} />
+          
+          {/* 客服状态 */}
+          <AgentStatusManager
+            agentId="agent_001"
+            onStatusChange={handleStatusChange}
+          />
+          
           <div className="flex items-center gap-2 text-sm text-muted-foreground">
             <Users className="h-4 w-4" />
             <span>在线客服</span>

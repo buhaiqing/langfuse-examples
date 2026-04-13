@@ -1,0 +1,74 @@
+# 告警规则配置
+
+groups:
+  - name: smart-customer-service
+    rules:
+      # API 错误率告警
+      - alert: HighAPIErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "API 错误率过高"
+          description: "API 错误率超过 5% (当前值：{{ $value }})"
+      
+      # API 延迟告警
+      - alert: HighAPILatency
+        expr: histogram_quantile(0.95, rate(http_request_duration_seconds_bucket[5m])) > 0.5
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "API 延迟过高"
+          description: "P95 延迟超过 500ms (当前值：{{ $value }}s)"
+      
+      # WebSocket 连接数告警
+      - alert: HighWebSocketConnections
+        expr: websocket_connections_total > 900
+        for: 2m
+        labels:
+          severity: warning
+        annotations:
+          summary: "WebSocket 连接数接近上限"
+          description: "WebSocket 连接数超过 900 (当前值：{{ $value }})"
+      
+      # Redis 内存使用告警
+      - alert: HighRedisMemory
+        expr: redis_memory_used_bytes / redis_memory_max_bytes > 0.9
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "Redis 内存使用率过高"
+          description: "Redis 内存使用率超过 90% (当前值：{{ $value | humanizePercentage }})"
+      
+      # 服务不可用告警
+      - alert: ServiceDown
+        expr: up{job="smart-customer-service"} == 0
+        for: 1m
+        labels:
+          severity: critical
+        annotations:
+          summary: "智能客服服务不可用"
+          description: "服务实例 {{ $labels.instance }} 已下线"
+      
+      # 升级队列积压告警
+      - alert: EscalationQueueBacklog
+        expr: escalation_queue_size > 10
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: "升级队列积压"
+          description: "升级队列超过 10 个会话 (当前值：{{ $value }})"
+      
+      # 客服离线告警
+      - alert: LowAgentAvailability
+        expr: agent_online_count < 3
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: "在线客服数量不足"
+          description: "仅 {{ $value }} 个客服在线"

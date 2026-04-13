@@ -1,0 +1,70 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: smart-cs-api
+  labels:
+    app: smart-customer-service
+    component: api
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: smart-customer-service
+      component: api
+  template:
+    metadata:
+      labels:
+        app: smart-customer-service
+        component: api
+    spec:
+      containers:
+        - name: api
+          image: smart-customer-service:v1.0.0
+          ports:
+            - containerPort: 8000
+          env:
+            - name: ENVIRONMENT
+              value: "production"
+            - name: LOG_LEVEL
+              value: "INFO"
+          envFrom:
+            - configMapRef:
+                name: smart-cs-config
+            - secretRef:
+                name: smart-cs-secrets
+          resources:
+            requests:
+              cpu: "500m"
+              memory: "512Mi"
+            limits:
+              cpu: "2000m"
+              memory: "2Gi"
+          livenessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 30
+            periodSeconds: 10
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 8000
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: config
+              mountPath: /app/config
+      volumes:
+        - name: config
+          configMap:
+            name: smart-cs-config
+      affinity:
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+            - weight: 100
+              podAffinityTerm:
+                labelSelector:
+                  matchLabels:
+                    app: smart-customer-service
+                    component: api
+                topologyKey: kubernetes.io/hostname

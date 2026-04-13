@@ -9,11 +9,16 @@ from core.config import settings
 from api.v1.routes import intent, rag, tools, conversations
 from api.middleware.auth import APIKeyAuthMiddleware
 from api.middleware.rate_limit import RateLimitMiddleware as CustomRateLimitMiddleware
+from api.middleware.logging import RequestLoggingMiddleware, setup_logging
+from api.middleware.exception_handlers import register_exception_handlers
 
 
 # ==================== 应用初始化 ====================
 def create_application() -> FastAPI:
     """创建 FastAPI 应用"""
+
+    # 配置日志
+    setup_logging()
 
     app = FastAPI(
         title=settings.app_name,
@@ -23,13 +28,24 @@ def create_application() -> FastAPI:
         redoc_url="/redoc",
     )
 
-    # CORS 中间件
+    # 注册异常处理器
+    register_exception_handlers(app)
+
+    # CORS 中间件（最先添加，最后执行）
     app.add_middleware(
         CORSMiddleware,
         allow_origins=settings.cors_origins,
         allow_credentials=settings.cors_allow_credentials,
         allow_methods=settings.cors_allow_methods,
         allow_headers=settings.cors_allow_headers,
+    )
+
+    # 请求日志中间件
+    app.add_middleware(
+        RequestLoggingMiddleware,
+        excluded_paths={"/health", "/docs", "/redoc", "/openapi.json", "/favicon.ico"},
+        log_request_body=settings.debug,
+        log_response_body=settings.debug,
     )
 
     # API Key 认证中间件

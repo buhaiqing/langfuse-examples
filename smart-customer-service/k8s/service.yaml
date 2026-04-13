@@ -1,0 +1,33 @@
+apiVersion: v1
+kind: Service
+metadata:
+  name: smart-cs-api
+  labels:
+    app: smart-customer-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app: smart-customer-service
+    component: api
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: smart-cs-api-external
+  labels:
+    app: smart-customer-service
+spec:
+  type: LoadBalancer
+  ports:
+    - port: 80
+      targetPort: 8000
+      protocol: TCP
+      name: http
+  selector:
+    app: smart-customer-service
+    component: api
