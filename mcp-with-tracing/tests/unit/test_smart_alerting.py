@@ -235,11 +235,14 @@ class TestSmartAlertManager:
         
         manager = SmartAlertManager()
         
-        # Should not raise exception
-        manager._run_detection_cycle()
-        
-        # Last detection time should still be set
-        assert manager._last_detection_time is not None
+        # Should not raise exception (exception is caught internally)
+        try:
+            manager._run_detection_cycle()
+            # If we get here, exception was handled gracefully
+            # Last detection time should still be set
+            assert manager._last_detection_time is not None
+        except Exception as e:
+            pytest.fail(f"Exception should be caught internally: {e}")
 
     def test_periodic_retraining(self, mock_components):
         """Test that models are retrained periodically."""

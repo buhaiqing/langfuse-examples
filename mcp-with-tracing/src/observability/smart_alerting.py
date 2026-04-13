@@ -90,31 +90,39 @@ class SmartAlertManager(AlertManager):
 
     def _run_detection_cycle(self) -> None:
         """Execute one detection cycle."""
-        now = datetime.now(timezone.utc)
+        try:
+            now = datetime.now(timezone.utc)
 
-        # Train models on first run or periodically
-        if self._last_detection_time is None:
-            print("Initial model training...")
-            self.anomaly_detector.train_all_models(hours_of_history=24)
-        elif (now - self._last_detection_time).total_seconds() > 3600:
-            # Retrain every hour
-            print("Periodic model retraining...")
-            self.anomaly_detector.train_all_models(hours_of_history=24)
+            # Train models on first run or periodically
+            if self._last_detection_time is None:
+                print("Initial model training...")
+                self.anomaly_detector.train_all_models(hours_of_history=24)
+            elif (now - self._last_detection_time).total_seconds() > 3600:
+                # Retrain every hour
+                print("Periodic model retraining...")
+                self.anomaly_detector.train_all_models(hours_of_history=24)
 
-        # Execute anomaly detection
-        print("Running anomaly detection...")
-        anomalies = self.anomaly_detector.detect_anomalies()
+            # Execute anomaly detection
+            print("Running anomaly detection...")
+            anomalies = self.anomaly_detector.detect_anomalies()
 
-        # Create alerts for detected anomalies
-        for anomaly in anomalies:
-            self._create_smart_alert(anomaly)
+            # Create alerts for detected anomalies
+            for anomaly in anomalies:
+                self._create_smart_alert(anomaly)
 
-        self._last_detection_time = now
-        
-        if anomalies:
-            print(f"Detected {len(anomalies)} anomalies")
-        else:
-            print("No anomalies detected")
+            self._last_detection_time = now
+            
+            if anomalies:
+                print(f"Detected {len(anomalies)} anomalies")
+            else:
+                print("No anomalies detected")
+        except Exception as e:
+            # Log exception but don't crash the monitoring thread
+            print(f"Detection cycle failed: {e}")
+            import traceback
+            traceback.print_exc()
+            # Still update last detection time to avoid repeated failures
+            self._last_detection_time = datetime.now(timezone.utc)
 
     def _create_smart_alert(self, anomaly: Dict[str, Any]) -> None:
         """
