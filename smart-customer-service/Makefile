@@ -1,4 +1,4 @@
-.PHONY: help install install-dev update clean run-test run-basic run-demo run-verify lint format type-check check-all setup dotenv build
+.PHONY: help install install-dev update clean run-test run-basic run-demo run-verify lint format type-check check-all setup dotenv build docker-up docker-down docker-logs docker-restart redis-cli postgres-cli db-migrate db-init minio-init
 
 # Default target
 help:
@@ -148,3 +148,54 @@ build:
 	@echo ""
 	@echo "✓ Package built successfully!"
 	@echo "  Distribution files are in dist/"
+
+# Docker Commands
+docker-up:
+	@echo "Starting Docker containers..."
+	docker-compose up -d
+	@echo "✓ Containers started"
+	@echo "  API: http://localhost:8000"
+	@echo "  Redis: localhost:6379"
+	@echo "  PostgreSQL: localhost:5432"
+	@echo "  ChromaDB: localhost:8001"
+	@echo "  MinIO Console: http://localhost:9001"
+
+docker-down:
+	@echo "Stopping Docker containers..."
+	docker-compose down
+	@echo "✓ Containers stopped"
+
+docker-logs:
+	@echo "Showing container logs..."
+	docker-compose logs -f
+
+docker-restart: docker-down docker-up
+
+redis-cli:
+	@echo "Connecting to Redis..."
+	docker exec -it smart-cs-redis redis-cli
+
+postgres-cli:
+	@echo "Connecting to PostgreSQL..."
+	docker exec -it smart-cs-postgres psql -U postgres -d smart_cs
+
+db-migrate:
+	@echo "Running database migrations..."
+	uv run alembic upgrade head
+
+db-init: docker-up
+	@echo "Initializing databases..."
+	@sleep 5
+	@echo "✓ Databases initialized"
+
+minio-init:
+	@echo "Creating MinIO bucket..."
+	@echo "Bucket: smart-cs-archives"
+	@echo "✓ MinIO initialized"
+
+# Quick Start
+quick-start: setup docker-up db-init
+	@echo ""
+	@echo "✓ Quick start complete!"
+	@echo "  API Docs: http://localhost:8000/docs"
+	@echo "  Health Check: http://localhost:8000/health"

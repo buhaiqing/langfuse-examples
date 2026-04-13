@@ -27,6 +27,26 @@ lxml>=4.9.0
 
 # Data processing
 pydantic>=2.0.0
+pydantic-settings>=2.0.0
+
+# Redis
+redis>=5.0.0
+
+# PostgreSQL
+psycopg2-binary>=2.9.0
+sqlalchemy>=2.0.0
+alembic>=1.13.0
+
+# ChromaDB
+chromadb>=0.4.0
+
+# MinIO
+minio>=7.2.0
+
+# JWT & Auth
+PyJWT>=2.8.0
+passlib>=1.7.4
+bcrypt>=4.1.0
 
 # Web Framework
 fastapi>=0.109.0
