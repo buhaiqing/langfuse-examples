@@ -21,13 +21,51 @@
 
 ### 什么是智能告警?
 
-智能告警系统是在传统阈值告警基础上的增强,使用机器学习算法自动检测异常模式,无需手动设置固定阈值。
+智能告警系统（Phase 6）是在传统阈值告警（Phase 5）基础上的**增强层**，使用机器学习算法自动检测异常模式，无需手动设置固定阈值。
 
 **核心优势**:
 - 🤖 **自动学习**: 从历史数据中学习正常模式
 - 📊 **多维分析**: 同时监控多个指标的关联异常
 - ⚡ **实时检测**: 近实时监控(5-10分钟窗口)
 - 🎯 **减少误报**: 基于统计显著性判断异常
+
+### 与传统告警的关系
+
+项目中有**两套并行的告警系统**：
+
+| 特性 | 传统告警 (Phase 5) | 智能告警 (Phase 6) |
+|------|-------------------|-------------------|
+| **检测方式** | 固定阈值规则 | ML 模型自动学习 |
+| **配置方式** | 手动设置阈值 | 自动训练，无需配置 |
+| **适用场景** | 明确的业务规则 | 未知异常模式发现 |
+| **检测指标** | 可自定义任意指标 | 成功率、延迟、流量、满意度 |
+| **误报率** | 较高（需人工调优） | 较低（自适应调整） |
+| **启动方式** | AlertMonitorScheduler | SmartAlertManager |
+| **检测间隔** | 默认 5 分钟 | 默认 10 分钟 |
+| **依赖** | 无额外依赖 | prophet, pyod, pandas, numpy, sklearn |
+
+**两者关系**:
+- ✅ **互补而非替代**: 传统告警处理已知规则，智能告警发现未知异常
+- ✅ **并行运行**: 两个系统独立运行，互不干扰
+- ✅ **共享通知渠道**: 都使用相同的 AlertChannel 和 Notifier
+- ✅ **统一告警存储**: 所有告警都存储在 AlertManager._alerts 中
+
+**推荐配置**:
+```python
+# 传统告警: 明确的业务规则
+# 例如: 成功率 < 95% 立即告警
+manager.add_rule(AlertRule(
+    name="critical_success_rate",
+    metric="success_rate",
+    threshold=0.95,
+    operator="lt",
+    severity=AlertSeverity.CRITICAL
+))
+
+# 智能告警: 自动发现异常模式
+# 例如: 检测到成功率突然下降 20%，即使仍高于 95%
+smart_manager.start_monitoring()  # 自动运行
+```
 
 ### 支持的指标
 
@@ -103,6 +141,30 @@ pip install -e .
 ```
 
 ### 2. 基本用法
+
+**注意**: 智能告警已集成到服务器启动流程中，无需手动启动！
+
+服务器启动时会自动初始化智能告警：
+
+```bash
+python -m src.server
+```
+
+你会看到以下日志：
+```
+============================================================
+Starting smart ML-based anomaly detection...
+============================================================
+✅ Smart ML anomaly detection enabled (every 10 minutes)
+   - Prophet time series forecasting
+   - PyOD multivariate anomaly detection
+   - Auto-detects: success_rate, latency_p95, request_rate, satisfaction
+============================================================
+```
+
+#### 手动测试（可选）
+
+如果需要在代码中手动测试：
 
 ```python
 from src.observability.smart_alerting import SmartAlertManager

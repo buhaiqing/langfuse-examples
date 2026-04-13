@@ -19,6 +19,7 @@ from src.observability.feedback import (
 from src.observability.session import get_session_id
 from src.observability.alert_config_loader import load_alert_rules
 from src.observability.alert_monitor import start_alert_monitor
+from src.observability.smart_alerting import SmartAlertManager
 
 mcp = FastMCP("MCP Langfuse Observability Server")
 
@@ -174,19 +175,37 @@ def main():
         print("   Server will start without alert rules.")
     print("=" * 60 + "\n")
 
-    # Start background alert monitoring
+    # Start background alert monitoring (Phase 5: Rule-based)
     print("=" * 60)
-    print("Starting alert monitoring...")
+    print("Starting rule-based alert monitoring...")
     print("=" * 60)
     try:
         import os
 
         check_interval = int(os.getenv("ALERT_CHECK_INTERVAL_MINUTES", "5"))
         monitor = start_alert_monitor(check_interval_minutes=check_interval)
-        print(f"✅ Alert monitoring enabled (every {check_interval} minutes)")
+        print(f"✅ Rule-based alert monitoring enabled (every {check_interval} minutes)")
     except Exception as e:
-        print(f"❌ Failed to start alert monitor: {e}")
-        print("   Server will run without automatic alert checking.")
+        print(f"❌ Failed to start rule-based alert monitor: {e}")
+        print("   Server will run without automatic rule-based alert checking.")
+    print("=" * 60 + "\n")
+
+    # Start smart ML-based anomaly detection (Phase 6)
+    print("=" * 60)
+    print("Starting smart ML-based anomaly detection...")
+    print("=" * 60)
+    try:
+        smart_check_interval = int(os.getenv("SMART_ALERT_CHECK_INTERVAL_MINUTES", "10"))
+        smart_manager = SmartAlertManager(detection_interval_minutes=smart_check_interval)
+        smart_manager.start_monitoring()
+        print(f"✅ Smart ML anomaly detection enabled (every {smart_check_interval} minutes)")
+        print(f"   - Prophet time series forecasting")
+        print(f"   - PyOD multivariate anomaly detection")
+        print(f"   - Auto-detects: success_rate, latency_p95, request_rate, satisfaction")
+    except Exception as e:
+        print(f"❌ Failed to start smart ML anomaly detection: {e}")
+        print("   Server will run without ML-based anomaly detection.")
+        print("   Install dependencies: pip install prophet pyod pandas numpy scikit-learn")
     print("=" * 60 + "\n")
 
     mcp.run()

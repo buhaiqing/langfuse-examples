@@ -1,253 +1,402 @@
 """
-Document loader for multiple file formats
-Supports PDF, DOCX, Markdown, and HTML
+文档加载器模块 - 支持多格式文档解析和智能分块。
+
+提供PDF、Word、Markdown、HTML等格式的文档解析功能，
+以及多种分块策略（递归字符、段落、标题层级）。
 """
 
-import uuid
+import hashlib
+import logging
 from dataclasses import dataclass, field
 from pathlib import Path
-from typing import Any, Iterator, List, Optional
+from typing import Any, Dict, List, Optional
 
-from core.logging_config import LogCategory, get_logger
-from core.tracing import create_span
+from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langfuse import observe
 
-logger = get_logger(LogCategory.RAG)
+logger = logging.getLogger(__name__)
 
 
 @dataclass
 class Document:
+    """文档数据模型。
+
+    Attributes:
+        page_content: 文档内容文本
+        metadata: 元数据字典，包含来源、页码、标题等信息
+        doc_id: 文档唯一标识符（UUID）
+        embedding: 可选的向量嵌入
+    """
+
     page_content: str
-    metadata: dict[str, Any] = field(default_factory=dict)
-    doc_id: str = field(default_factory=lambda: str(uuid.uuid4()))
+    metadata: Dict[str, Any] = field(default_factory=dict)
+    doc_id: str = ""
+    embedding: Optional[List[float]] = None
+
+    def __post_init__(self):
+        """初始化后生成doc_id（如果未提供）。"""
+        if not self.doc_id:
+            content_hash = hashlib.md5(self.page_content.encode()).hexdigest()[:16]
+            self.doc_id = f"doc_{content_hash}"
 
 
 class DocumentParser:
-    """Unified interface for parsing multiple document formats"""
+    """文档解析器 - 支持多种文档格式。
 
-    def __init__(self):
-        self._parsers = {
-            ".pdf": self._parse_pdf,
-            ".docx": self._parse_docx,
-            ".md": self._parse_markdown,
-            ".markdown": self._parse_markdown,
-            ".html": self._parse_html,
-            ".htm": self._parse_html,
-        }
+    支持PDF、DOCX、Markdown、HTML格式的文档解析。
+    """
 
-    def parse(self, file_path: Path) -> Document:
-        suffix = file_path.suffix.lower()
-        parser = self._parsers.get(suffix)
+    SUPPORTED_FORMATS = {".pdf", ".docx", ".md", ".markdown", ".html", ".htm"}
 
-        if not parser:
-            raise ValueError(f"Unsupported file format: {suffix}")
+    @observe(name="parse_document", as_type="span")
+    def parse(self, file_path: Path) -> str:
+        """解析文档文件，提取文本内容。
 
-        logger.debug(f"Parsing document: {file_path}")
-        return parser(file_path)
+        Args:
+            file_path: 文档文件路径
 
-    def parse_batch(self, file_paths: List[Path]) -> List[Document]:
+        Returns:
+            提取的文本内容
+
+        Raises:
+            FileNotFoundError: 文件不存在
+            ValueError: 不支持的文件格式
+            Exception: 解析过程中的其他错误
+        """
+        if not file_path.exists():
+            raise FileNotFoundError(f"文件不存在: {file_path}")
+
+        ext = file_path.suffix.lower()
+        if ext not in self.SUPPORTED_FORMATS:
+            raise ValueError(f"不支持的文件格式: {ext}。支持的格式: {self.SUPPORTED_FORMATS}")
+
+        logger.info(f"开始解析文档: {file_path}")
+
+        try:
+            if ext == ".pdf":
+                text = self._parse_pdf(file_path)
+            elif ext == ".docx":
+                text = self._parse_docx(file_path)
+            elif ext in [".md", ".markdown"]:
+                text = self._parse_markdown(file_path)
+            elif ext in [".html", ".htm"]:
+                text = self._parse_html(file_path)
+            else:
+                raise ValueError(f"不支持的格式: {ext}")
+
+            logger.info(f"文档解析完成，提取 {len(text)} 字符")
+            return text
+
+        except Exception as e:
+            logger.error(f"文档解析失败: {e}")
+            raise
+
+    def _parse_pdf(self, file_path: Path) -> str:
+        """解析PDF文件。
+
+        Args:
+            file_path: PDF文件路径
+
+        Returns:
+            提取的文本内容
+        """
+        try:
+            import fitz  # PyMuPDF
+
+            doc = fitz.open(file_path)
+            text_parts = []
+
+            for page_num, page in enumerate(doc):
+                page_text = page.get_text()
+                if page_text.strip():
+                    text_parts.append(page_text)
+
+            doc.close()
+            return "\n\n".join(text_parts)
+
+        except ImportError:
+            logger.warning("PyMuPDF未安装，尝试使用备用方法")
+            return self._parse_pdf_fallback(file_path)
+
+    def _parse_pdf_fallback(self, file_path: Path) -> str:
+        """PDF解析备用方法（使用PyPDF2）。
+
+        Args:
+            file_path: PDF文件路径
+
+        Returns:
+            提取的文本内容
+        """
+        try:
+            from PyPDF2 import PdfReader
+
+            reader = PdfReader(file_path)
+            text_parts = []
+
+            for page in reader.pages:
+                text = page.extract_text()
+                if text:
+                    text_parts.append(text)
+
+            return "\n\n".join(text_parts)
+
+        except ImportError:
+            raise ImportError(
+                "需要安装 PyMuPDF 或 PyPDF2 来解析PDF文件。"
+                "请运行: pip install PyMuPDF 或 pip install PyPDF2"
+            )
+
+    def _parse_docx(self, file_path: Path) -> str:
+        """解析Word文档。
+
+        Args:
+            file_path: DOCX文件路径
+
+        Returns:
+            提取的文本内容
+        """
+        try:
+            from docx import Document
+
+            doc = Document(file_path)
+            paragraphs = [para.text for para in doc.paragraphs if para.text.strip()]
+            return "\n\n".join(paragraphs)
+
+        except ImportError:
+            raise ImportError(
+                "需要安装 python-docx 来解析Word文档。"
+                "请运行: pip install python-docx"
+            )
+
+    def _parse_markdown(self, file_path: Path) -> str:
+        """解析Markdown文件。
+
+        Args:
+            file_path: Markdown文件路径
+
+        Returns:
+            提取的文本内容
+        """
+        with open(file_path, "r", encoding="utf-8") as f:
+            return f.read()
+
+    def _parse_html(self, file_path: Path) -> str:
+        """解析HTML文件。
+
+        Args:
+            file_path: HTML文件路径
+
+        Returns:
+            提取的文本内容
+        """
+        try:
+            from bs4 import BeautifulSoup
+
+            with open(file_path, "r", encoding="utf-8") as f:
+                soup = BeautifulSoup(f.read(), "html.parser")
+                return soup.get_text(separator="\n", strip=True)
+
+        except ImportError:
+            raise ImportError(
+                "需要安装 beautifulsoup4 来解析HTML文件。"
+                "请运行: pip install beautifulsoup4"
+            )
+
+
+class DocumentChunker:
+    """文档分块器 - 支持多种分块策略。
+
+    支持递归字符分割、段落分割、标题层级分割等策略。
+    """
+
+    def __init__(
+        self,
+        strategy: str = "recursive",
+        chunk_size: int = 1000,
+        chunk_overlap: int = 200,
+    ):
+        """初始化分块器。
+
+        Args:
+            strategy: 分块策略 ('recursive', 'paragraph', 'title')
+            chunk_size: 每个块的大小（字符数）
+            chunk_overlap: 块之间的重叠字符数
+        """
+        self.strategy = strategy
+        self.chunk_size = chunk_size
+        self.chunk_overlap = chunk_overlap
+
+    @observe(name="chunk_documents", as_type="span")
+    def chunk(
+        self,
+        text: str,
+        metadata: Optional[Dict[str, Any]] = None,
+    ) -> List[Document]:
+        """将文本分块为多个文档。
+
+        Args:
+            text: 要分块的文本内容
+            metadata: 元数据字典，会添加到每个分块中
+
+        Returns:
+            分块后的文档列表
+        """
+        logger.info(f"开始分块，策略: {self.strategy}, 块大小: {self.chunk_size}")
+
+        if self.strategy == "recursive":
+            chunks = self._recursive_chunk(text)
+        elif self.strategy == "paragraph":
+            chunks = self._paragraph_chunk(text)
+        elif self.strategy == "title":
+            chunks = self._title_chunk(text)
+        else:
+            raise ValueError(f"不支持的分块策略: {self.strategy}")
+
         documents = []
-        for file_path in file_paths:
-            try:
-                doc = self.parse(file_path)
+        for i, chunk_text in enumerate(chunks):
+            if chunk_text.strip():
+                chunk_metadata = metadata.copy() if metadata else {}
+                chunk_metadata["chunk_index"] = i
+                chunk_metadata["chunk_strategy"] = self.strategy
+
+                doc = Document(
+                    page_content=chunk_text.strip(),
+                    metadata=chunk_metadata,
+                )
                 documents.append(doc)
-            except Exception as e:
-                logger.error(f"Failed to parse {file_path}: {e}")
-                continue
+
+        logger.info(f"分块完成，共 {len(documents)} 个块")
         return documents
 
-    def _parse_pdf(self, file_path: Path) -> Document:
-        import fitz
+    def _recursive_chunk(self, text: str) -> List[str]:
+        """使用递归字符分割器分块。
 
-        text_parts = []
-        metadata = {
-            "source": str(file_path),
-            "filename": file_path.name,
-            "format": "pdf",
-        }
+        Args:
+            text: 要分块的文本
 
-        with fitz.open(file_path) as doc:
-            metadata["page_count"] = len(doc)
-            for page_num, page in enumerate(doc):
-                text = page.get_text()
-                if text.strip():
-                    text_parts.append({
-                        "page_num": page_num + 1,
-                        "text": text,
-                        "page_width": page.rect.width,
-                        "page_height": page.rect.height,
-                    })
-
-        full_text = "\n\n".join(part["text"] for part in text_parts)
-        metadata["pages"] = text_parts
-
-        return Document(
-            page_content=full_text,
-            metadata=metadata,
-            doc_id=f"doc_{uuid.uuid4().hex[:8]}",
+        Returns:
+            分块后的文本列表
+        """
+        splitter = RecursiveCharacterTextSplitter(
+            chunk_size=self.chunk_size,
+            chunk_overlap=self.chunk_overlap,
+            separators=["\n\n", "\n", " ", ""],
         )
+        return splitter.split_text(text)
 
-    def _parse_docx(self, file_path: Path) -> Document:
-        from docx import Document as DocxDocument
+    def _paragraph_chunk(self, text: str) -> List[str]:
+        """按段落分块。
 
-        doc = DocxDocument(file_path)
-        paragraphs = []
-        tables = []
+        Args:
+            text: 要分块的文本
 
-        for element in doc.element.body:
-            if element.tag.endswith("p"):
-                para = doc.paragraphs[len(paragraphs)]
-                if para.text.strip():
-                    paragraphs.append(para.text)
-            elif element.tag.endswith("tbl"):
-                table_data = []
-                table = doc.tables[len(tables)]
-                for row in table.rows:
-                    row_data = [cell.text for cell in row.cells]
-                    table_data.append(row_data)
-                tables.append(table_data)
+        Returns:
+            分块后的文本列表
+        """
+        paragraphs = text.split("\n\n")
+        chunks = []
+        current_chunk = ""
 
-        full_text = "\n\n".join(paragraphs)
-        metadata = {
-            "source": str(file_path),
-            "filename": file_path.name,
-            "format": "docx",
-            "paragraph_count": len(paragraphs),
-            "table_count": len(tables),
-            "tables": tables,
-            "headings": [p for p in paragraphs if self._is_heading(p)],
-        }
+        for para in paragraphs:
+            if len(current_chunk) + len(para) <= self.chunk_size:
+                if current_chunk:
+                    current_chunk += "\n\n" + para
+                else:
+                    current_chunk = para
+            else:
+                if current_chunk:
+                    chunks.append(current_chunk)
+                current_chunk = para
 
-        return Document(
-            page_content=full_text,
-            metadata=metadata,
-            doc_id=f"doc_{uuid.uuid4().hex[:8]}",
-        )
+        if current_chunk:
+            chunks.append(current_chunk)
 
-    def _parse_markdown(self, file_path: Path) -> Document:
+        return chunks
+
+    def _title_chunk(self, text: str) -> List[str]:
+        """按标题层级分块。
+
+        Args:
+            text: 要分块的文本
+
+        Returns:
+            分块后的文本列表
+        """
         import re
 
-        content = file_path.read_text(encoding="utf-8")
+        # 匹配Markdown标题 (# Title, ## Subtitle, etc.)
+        title_pattern = r"^(#{1,6})\s+(.+)$"
+        lines = text.split("\n")
 
-        headings = []
-        sections = re.split(r"(?=^#{1,6}\s)", content, flags=re.MULTILINE)
+        chunks = []
+        current_chunk = ""
+        current_title = ""
 
-        for section in sections:
-            match = re.match(r"^(#{1,6})\s+(.+)$", section.strip(), re.MULTILINE)
+        for line in lines:
+            match = re.match(title_pattern, line)
             if match:
-                headings.append({
-                    "level": len(match.group(1)),
-                    "text": match.group(2).strip(),
-                })
+                # 遇到新标题，保存当前块
+                if current_chunk:
+                    chunks.append(current_chunk)
+                current_title = line
+                current_chunk = line + "\n"
+            else:
+                if len(current_chunk) + len(line) <= self.chunk_size:
+                    current_chunk += line + "\n"
+                else:
+                    if current_chunk:
+                        chunks.append(current_chunk)
+                    current_chunk = line + "\n"
 
-        metadata = {
-            "source": str(file_path),
-            "filename": file_path.name,
-            "format": "markdown",
-            "headings": headings,
-            "section_count": len(sections),
-        }
+        if current_chunk:
+            chunks.append(current_chunk)
 
-        return Document(
-            page_content=content,
-            metadata=metadata,
-            doc_id=f"doc_{uuid.uuid4().hex[:8]}",
-        )
-
-    def _parse_html(self, file_path: Path) -> Document:
-        from bs4 import BeautifulSoup
-        import re
-
-        html_content = file_path.read_text(encoding="utf-8")
-        soup = BeautifulSoup(html_content, "html.parser")
-
-        for script in soup(["script", "style"]):
-            script.decompose()
-
-        text = soup.get_text(separator="\n", strip=True)
-
-        headings = []
-        for tag in ["h1", "h2", "h3", "h4", "h5", "h6"]:
-            for heading in soup.find_all(tag):
-                if heading.text.strip():
-                    headings.append({
-                        "level": int(tag[1]),
-                        "text": heading.text.strip(),
-                    })
-
-        links = []
-        for link in soup.find_all("a"):
-            href = link.get("href", "")
-            text_content = link.text.strip()
-            if href and text_content:
-                links.append({"text": text_content, "url": href})
-
-        metadata = {
-            "source": str(file_path),
-            "filename": file_path.name,
-            "format": "html",
-            "headings": headings,
-            "links": links,
-        }
-
-        return Document(
-            page_content=text,
-            metadata=metadata,
-            doc_id=f"doc_{uuid.uuid4().hex[:8]}",
-        )
-
-    def _is_heading(self, text: str) -> bool:
-        import re
-        return bool(re.match(r"^#{1,6}\s", text)) or (
-            text.isupper() and len(text) < 100
-        )
+        return chunks
 
 
+@observe(name="import_documents", as_type="span")
 def import_documents(
     file_paths: List[Path],
     chunk_strategy: str = "recursive",
     chunk_size: int = 1000,
     chunk_overlap: int = 200,
-    metadata: Optional[dict[str, Any]] = None,
+    metadata: Optional[Dict[str, Any]] = None,
 ) -> List[Document]:
-    """
-    Import documents from file paths with document parsing and optional chunking.
+    """导入并处理多个文档文件。
 
     Args:
-        file_paths: List of file paths to import
-        chunk_strategy: Chunking strategy (recursive, title_based, or None for no chunking)
-        chunk_size: Target size for each chunk
-        chunk_overlap: Overlap between chunks
-        metadata: Additional metadata to attach to documents
+        file_paths: 文档文件路径列表
+        chunk_strategy: 分块策略
+        chunk_size: 块大小
+        chunk_overlap: 块重叠大小
+        metadata: 额外元数据
 
     Returns:
-        List of Document objects
+        处理后的文档列表
     """
-    with create_span("document_import", input_data={
-        "file_count": len(file_paths),
-        "chunk_strategy": chunk_strategy,
-        "chunk_size": chunk_size,
-    }) as span:
-        parser = DocumentParser()
-        documents = parser.parse_batch(file_paths)
+    parser = DocumentParser()
+    chunker = DocumentChunker(
+        strategy=chunk_strategy,
+        chunk_size=chunk_size,
+        chunk_overlap=chunk_overlap,
+    )
 
-        for doc in documents:
-            if metadata:
-                doc.metadata.update(metadata)
+    all_documents = []
 
-        span.add_event("documents_parsed", output_data={"count": len(documents)})
+    for file_path in file_paths:
+        logger.info(f"处理文件: {file_path}")
 
-        if chunk_strategy and chunk_strategy != "none":
-            from modules.rag_knowledge.chunkers import get_chunker
-            chunker = get_chunker(chunk_strategy, chunk_size, chunk_overlap)
+        # 解析文档
+        text = parser.parse(file_path)
 
-            all_chunks = []
-            for doc in documents:
-                chunks = chunker.chunk(doc)
-                all_chunks.extend(chunks)
+        # 构建基础元数据
+        file_metadata = metadata.copy() if metadata else {}
+        file_metadata["source"] = str(file_path)
+        file_metadata["filename"] = file_path.name
 
-            span.add_event("documents_chunked", output_data={"chunk_count": len(all_chunks)})
-            documents = all_chunks
-        else:
-            span.add_event("documents_chunked", output_data={"chunk_count": len(documents)})
+        # 分块
+        documents = chunker.chunk(text, metadata=file_metadata)
+        all_documents.extend(documents)
 
-        return documents
+    logger.info(f"文档导入完成，共 {len(all_documents)} 个文档块")
+    return all_documents

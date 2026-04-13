@@ -1,65 +1,43 @@
 """
-Enhanced API client with retry, circuit breaker, and logging
-Provides robust HTTP communication for external service integration
+API客户端模块 - 提供统一的HTTP客户端封装。
+
+包含重试机制、熔断器、超时控制等功能，
+确保API调用的稳定性和可观测性。
 """
 
-import asyncio
-import json
+import logging
 import time
 from typing import Any, Dict, Optional
 
 import httpx
-from core.logging_config import LogCategory, get_logger
-from core.tracing import create_span, score_trace
+import pybreaker
+from langfuse import observe
 from tenacity import (
-    AsyncRetrying,
+    retry,
     retry_if_exception_type,
     stop_after_attempt,
     wait_exponential,
 )
-from pybreaker import CircuitBreaker
 
-logger = get_logger(LogCategory.TOOL)
-
-
-class APIClientError(Exception):
-    """Base exception for API client errors"""
-
-    def __init__(self, message: str, status_code: Optional[int] = None):
-        super().__init__(message)
-        self.status_code = status_code
+logger = logging.getLogger(__name__)
 
 
-class APITimeoutError(APIClientError):
-    """Raised when API request times out"""
+class CircuitBreakerError(Exception):
+    """熔断器异常。"""
 
     pass
 
 
-class APIRateLimitError(APIClientError):
-    """Raised when API rate limit is exceeded"""
+class APIClient:
+    """统一的HTTP API客户端。
 
-    def __init__(self, message: str, retry_after: Optional[int] = None):
-        super().__init__(message, status_code=429)
-        self.retry_after = retry_after
+    提供GET、POST、PUT、DELETE等方法，内置重试、熔断、超时控制。
 
-
-class CircuitBreakerOpenError(APIClientError):
-    """Raised when circuit breaker is open"""
-
-    pass
-
-
-class ResilientAPIClient:
-    """
-    Robust HTTP client with retry logic, circuit breaker, and comprehensive logging.
-
-    Features:
-    - Exponential backoff retry with jitter
-    - Circuit breaker pattern for fault tolerance
-    - Request/response logging with sensitive data masking
-    - Timeout control
-    - Full Langfuse tracing
+    Attributes:
+        base_url: API基础URL
+        timeout: 请求超时时间（秒）
+        max_retries: 最大重试次数
+        headers: 默认请求头
     """
 
     def __init__(
@@ -68,412 +46,202 @@ class ResilientAPIClient:
         api_key: Optional[str] = None,
         timeout: float = 30.0,
         max_retries: int = 3,
-        circuit_breaker_failure_threshold: int = 5,
-        circuit_breaker_recovery_timeout: int = 30,
-        rate_limit_per_second: Optional[float] = None,
+        headers: Optional[Dict[str, str]] = None,
     ):
-        """
-        Initialize resilient API client.
+        """初始化API客户端。
 
         Args:
-            base_url: Base URL for API endpoints
-            api_key: Optional API key for authentication
-            timeout: Request timeout in seconds
-            max_retries: Maximum number of retry attempts
-            circuit_breaker_failure_threshold: Number of failures before opening circuit
-            circuit_breaker_recovery_timeout: Seconds before attempting recovery
-            rate_limit_per_second: Optional rate limit (requests per second)
+            base_url: API基础URL
+            api_key: API密钥（可选）
+            timeout: 请求超时时间（秒）
+            max_retries: 最大重试次数
+            headers: 默认请求头
         """
         self.base_url = base_url.rstrip("/")
-        self.api_key = api_key
         self.timeout = timeout
         self.max_retries = max_retries
-        self.rate_limit_per_second = rate_limit_per_second
 
-        # Initialize HTTP client
-        self._client = httpx.AsyncClient(
-            timeout=httpx.Timeout(timeout),
-            headers=self._build_headers(),
-        )
-
-        # Initialize circuit breaker
-        self.circuit_breaker = CircuitBreaker(
-            fail_max=circuit_breaker_failure_threshold,
-            reset_timeout=circuit_breaker_recovery_timeout,
-        )
-
-        # Rate limiting
-        self._last_request_time: Optional[float] = None
-        self._request_count = 0
-
-        logger.info(
-            f"ResilientAPIClient initialized: base_url={base_url}, "
-            f"timeout={timeout}s, max_retries={max_retries}"
-        )
-
-    def _build_headers(self) -> Dict[str, str]:
-        """Build default headers including authentication"""
-        headers = {
+        # 构建默认请求头
+        self.headers = {
             "Content-Type": "application/json",
             "Accept": "application/json",
-            "User-Agent": "SmartCustomerService/1.0",
         }
+        if headers:
+            self.headers.update(headers)
+        if api_key:
+            self.headers["Authorization"] = f"Bearer {api_key}"
 
-        if self.api_key:
-            headers["Authorization"] = f"Bearer {self.api_key}"
-
-        return headers
-
-    async def get(
-        self, endpoint: str, params: Optional[Dict[str, Any]] = None
-    ) -> Dict[str, Any]:
-        """
-        Perform GET request with retry and circuit breaker.
-
-        Args:
-            endpoint: API endpoint path
-            params: Query parameters
-
-        Returns:
-            Response JSON data
-        """
-        return await self._request("GET", endpoint, params=params)
-
-    async def post(
-        self,
-        endpoint: str,
-        data: Optional[Dict[str, Any]] = None,
-        json_data: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """
-        Perform POST request with retry and circuit breaker.
-
-        Args:
-            endpoint: API endpoint path
-            data: Form data
-            json_data: JSON data
-
-        Returns:
-            Response JSON data
-        """
-        return await self._request(
-            "POST", endpoint, data=data, json_data=json_data
+        # 初始化熔断器：失败5次后熔断，30秒后恢复
+        self.circuit_breaker = pybreaker.CircuitBreaker(
+            fail_max=5,
+            reset_timeout=30,
         )
 
-    async def put(
-        self,
-        endpoint: str,
-        data: Optional[Dict[str, Any]] = None,
-        json_data: Optional[Dict[str, Any]] = None,
-    ) -> Dict[str, Any]:
-        """
-        Perform PUT request with retry and circuit breaker.
-
-        Args:
-            endpoint: API endpoint path
-            data: Form data
-            json_data: JSON data
-
-        Returns:
-            Response JSON data
-        """
-        return await self._request(
-            "PUT", endpoint, data=data, json_data=json_data
+        # 创建HTTP客户端
+        self.client = httpx.AsyncClient(
+            timeout=httpx.Timeout(timeout),
+            headers=self.headers,
         )
 
-    async def delete(self, endpoint: str) -> Dict[str, Any]:
-        """
-        Perform DELETE request with retry and circuit breaker.
+        logger.info(f"APIClient initialized: base_url={self.base_url}")
 
-        Args:
-            endpoint: API endpoint path
-
-        Returns:
-            Response JSON data
-        """
-        return await self._request("DELETE", endpoint)
-
-    async def _request(
+    @observe(name="api_call", as_type="span")
+    @retry(
+        stop=stop_after_attempt(3),
+        wait=wait_exponential(multiplier=1, min=2, max=10),
+        retry=retry_if_exception_type((httpx.HTTPError, ConnectionError)),
+        reraise=True,
+    )
+    async def _make_request(
         self,
         method: str,
-        endpoint: str,
+        url: str,
         params: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
         json_data: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """
-        Internal request method with retry, circuit breaker, and logging.
+        """执行HTTP请求（内部方法）。
 
         Args:
-            method: HTTP method
-            endpoint: API endpoint
-            params: Query parameters
-            data: Form data
-            json_data: JSON data
+            method: HTTP方法 (GET, POST, PUT, DELETE)
+            url: 完整URL或相对路径
+            params: URL查询参数
+            json_data: JSON请求体
 
         Returns:
-            Response JSON data
+            响应数据字典
 
         Raises:
-            APIClientError: On request failure
+            httpx.HTTPStatusError: HTTP状态码错误
+            httpx.RequestError: 请求错误
+            CircuitBreakerError: 熔断器触发
         """
-        url = f"{self.base_url}/{endpoint.lstrip('/')}"
+        # 检查熔断器状态
+        if self.circuit_breaker.current_state == "open":
+            raise CircuitBreakerError("熔断器已打开，请稍后重试")
 
-        with create_span("api_request", input_data={
-            "method": method,
-            "url": self._mask_sensitive_url(url),
-            "has_params": params is not None,
-        }) as main_span:
-            start_time = time.time()
-            attempt_count = 0
+        full_url = url if url.startswith("http") else f"{self.base_url}/{url.lstrip('/')}"
 
-            try:
-                # Check circuit breaker
-                if self.circuit_breaker.current_state == "open":
-                    raise CircuitBreakerOpenError(
-                        "Circuit breaker is open. Service unavailable."
-                    )
+        logger.debug(f"Making {method} request to {full_url}")
 
-                # Apply rate limiting
-                await self._apply_rate_limit()
-
-                # Execute request with retry
-                async for attempt in AsyncRetrying(
-                    stop=stop_after_attempt(self.max_retries),
-                    wait=wait_exponential(multiplier=1, min=1, max=10),
-                    retry=retry_if_exception_type(
-                        (httpx.TimeoutException, httpx.NetworkError, httpx.RemoteProtocolError)
-                    ),
-                    reraise=True,
-                ):
-                    attempt_count += 1
-
-                    with create_span("http_request_attempt") as attempt_span:
-                        attempt_span.add_event(
-                            "retry_attempt",
-                            output_data={"attempt": attempt_count},
-                        )
-
-                        # Prepare request
-                        prep_span = create_span("request_preparation")
-                        kwargs = self._prepare_request_kwargs(
-                            params, data, json_data
-                        )
-                        prep_span.end()
-
-                        # Execute HTTP request
-                        response = await self._execute_request(
-                            method, url, **kwargs
-                        )
-
-                        # Parse response
-                        parse_span = create_span("response_parsing")
-                        result = await self._parse_response(response)
-                        parse_span.end(
-                            output_data={"status_code": response.status_code}
-                        )
-
-                        attempt_span.end(
-                            output_data={
-                                "success": True,
-                                "status_code": response.status_code,
-                            }
-                        )
-
-                        # Record success in circuit breaker
-                        self.circuit_breaker.call_succeed()
-
-                        # Calculate latency
-                        latency_ms = (time.time() - start_time) * 1000
-                        score_trace("api_latency_ms", latency_ms)
-                        score_trace("api_success_rate", 1.0)
-
-                        main_span.end(
-                            output_data={
-                                "status": "success",
-                                "attempts": attempt_count,
-                                "latency_ms": latency_ms,
-                            }
-                        )
-
-                        return result
-
-            except CircuitBreakerOpenError:
-                logger.warning(f"Circuit breaker open for {url}")
-                score_trace("api_success_rate", 0.0)
-                raise
-
-            except httpx.TimeoutException as e:
-                logger.error(f"Request timeout after {attempt_count} attempts: {e}")
-                self.circuit_breaker.call_fail()
-                score_trace("api_success_rate", 0.0)
-                raise APITimeoutError(
-                    f"Request timed out after {attempt_count} attempts: {str(e)}"
-                )
-
-            except httpx.HTTPStatusError as e:
-                logger.error(f"HTTP error {e.response.status_code}: {e}")
-                self.circuit_breaker.call_fail()
-
-                if e.response.status_code == 429:
-                    retry_after = e.response.headers.get("Retry-After")
-                    raise APIRateLimitError(
-                        f"Rate limit exceeded: {str(e)}",
-                        retry_after=int(retry_after) if retry_after else None,
-                    )
-
-                raise APIClientError(
-                    f"HTTP {e.response.status_code}: {str(e)}",
-                    status_code=e.response.status_code,
-                )
-
-            except Exception as e:
-                logger.error(f"Request failed after {attempt_count} attempts: {e}")
-                self.circuit_breaker.call_fail()
-                score_trace("api_success_rate", 0.0)
-                raise APIClientError(f"Request failed: {str(e)}")
-
-    async def _execute_request(
-        self, method: str, url: str, **kwargs
-    ) -> httpx.Response:
-        """
-        Execute HTTP request with logging.
-
-        Args:
-            method: HTTP method
-            url: Request URL
-            **kwargs: Additional request arguments
-
-        Returns:
-            HTTP response
-        """
-        # Log request (masked)
-        logger.debug(
-            f"Sending {method} request to {self._mask_sensitive_url(url)}"
-        )
-
-        # Execute request
-        response = await self._client.request(method, url, **kwargs)
-
-        # Log response status
-        logger.debug(
-            f"Received response: status={response.status_code}, "
-            f"url={self._mask_sensitive_url(url)}"
-        )
-
-        # Raise for bad status codes
-        response.raise_for_status()
-
-        return response
-
-    async def _parse_response(self, response: httpx.Response) -> Dict[str, Any]:
-        """
-        Parse HTTP response to JSON.
-
-        Args:
-            response: HTTP response
-
-        Returns:
-            Parsed JSON data
-        """
         try:
-            return response.json()
-        except json.JSONDecodeError:
-            logger.warning(
-                f"Response is not valid JSON: {response.text[:200]}"
+            response = await self.client.request(
+                method=method.upper(),
+                url=full_url,
+                params=params,
+                json=json_data,
             )
-            return {"raw_response": response.text}
 
-    def _prepare_request_kwargs(
+            # 记录熔断器成功
+            self.circuit_breaker.call_succeed()
+
+            # 检查HTTP状态码
+            response.raise_for_status()
+
+            # 尝试解析JSON
+            try:
+                return response.json()
+            except Exception:
+                return {"text": response.text}
+
+        except httpx.HTTPStatusError as e:
+            # 记录熔断器失败
+            self.circuit_breaker.call_fail()
+            logger.error(f"HTTP error: {e.response.status_code} - {e.response.text}")
+            raise
+
+        except httpx.RequestError as e:
+            # 记录熔断器失败
+            self.circuit_breaker.call_fail()
+            logger.error(f"Request error: {e}")
+            raise
+
+    @observe(name="api_get", as_type="span")
+    async def get(
         self,
-        params: Optional[Dict],
-        data: Optional[Dict],
-        json_data: Optional[Dict],
+        url: str,
+        params: Optional[Dict[str, Any]] = None,
     ) -> Dict[str, Any]:
-        """
-        Prepare keyword arguments for HTTP request.
+        """执行GET请求。
 
         Args:
-            params: Query parameters
-            data: Form data
-            json_data: JSON data
+            url: API路径或完整URL
+            params: URL查询参数
 
         Returns:
-            Request kwargs
+            响应数据字典
         """
-        kwargs = {}
+        return await self._make_request("GET", url, params=params)
 
-        if params:
-            kwargs["params"] = params
-
-        if data:
-            kwargs["data"] = data
-
-        if json_data:
-            kwargs["json"] = json_data
-
-        return kwargs
-
-    async def _apply_rate_limit(self) -> None:
-        """Apply rate limiting if configured"""
-        if not self.rate_limit_per_second:
-            return
-
-        now = time.time()
-
-        if self._last_request_time:
-            elapsed = now - self._last_request_time
-            min_interval = 1.0 / self.rate_limit_per_second
-
-            if elapsed < min_interval:
-                wait_time = min_interval - elapsed
-                logger.debug(f"Rate limiting: waiting {wait_time:.2f}s")
-                await asyncio.sleep(wait_time)
-
-        self._last_request_time = time.time()
-        self._request_count += 1
-
-    @staticmethod
-    def _mask_sensitive_url(url: str) -> str:
-        """
-        Mask sensitive information in URL (tokens, keys).
+    @observe(name="api_post", as_type="span")
+    async def post(
+        self,
+        url: str,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """执行POST请求。
 
         Args:
-            url: Original URL
+            url: API路径或完整URL
+            data: 请求体数据
 
         Returns:
-            Masked URL
+            响应数据字典
         """
-        import re
+        return await self._make_request("POST", url, json_data=data)
 
-        # Mask common sensitive patterns
-        masked = re.sub(r"(token|key|secret|password)=([^&]+)", r"\1=***", url)
-        return masked
+    @observe(name="api_put", as_type="span")
+    async def put(
+        self,
+        url: str,
+        data: Optional[Dict[str, Any]] = None,
+    ) -> Dict[str, Any]:
+        """执行PUT请求。
 
+        Args:
+            url: API路径或完整URL
+            data: 请求体数据
+
+        Returns:
+            响应数据字典
+        """
+        return await self._make_request("PUT", url, json_data=data)
+
+    @observe(name="api_delete", as_type="span")
+    async def delete(self, url: str) -> Dict[str, Any]:
+        """执行DELETE请求。
+
+        Args:
+            url: API路径或完整URL
+
+        Returns:
+            响应数据字典
+        """
+        return await self._make_request("DELETE", url)
+
+    @observe(name="health_check", as_type="span")
     async def health_check(self) -> bool:
-        """
-        Perform health check on the API service.
+        """健康检查。
 
         Returns:
-            True if service is healthy
+            True if healthy, False otherwise
         """
         try:
-            # Try a simple GET request to root or health endpoint
-            await self.get("/health", params={})
+            # 尝试访问根路径或health端点
+            await self.get("/health")
             return True
         except Exception as e:
             logger.warning(f"Health check failed: {e}")
             return False
 
-    async def close(self) -> None:
-        """Close the HTTP client"""
-        await self._client.aclose()
-        logger.info("API client closed")
+    async def close(self):
+        """关闭HTTP客户端连接。"""
+        await self.client.aclose()
+        logger.info("APIClient closed")
 
     async def __aenter__(self):
-        """Async context manager entry"""
+        """异步上下文管理器入口。"""
         return self
 
     async def __aexit__(self, exc_type, exc_val, exc_tb):
-        """Async context manager exit"""
+        """异步上下文管理器出口。"""
         await self.close()

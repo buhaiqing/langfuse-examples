@@ -6,36 +6,7 @@
 
 本项目包含两个基于 Langfuse 的生产级应用示例:
 
-### 1. [Smart Customer Service](smart-customer-service/) - 智能客服系统
-
-基于 Langfuse 构建的智能客服系统,实现会话路径全链路追踪与高频失败问题分析。
-
-**核心价值:**
-- ✅ **全链路可观测**: 打破智能客服会话黑盒,从进线到结束完整追踪
-- ✅ **失败根因定位**: 标准化埋点体系,快速定位问题根因
-- ✅ **数据驱动优化**: A/B测试验证,量化优化效果
-- ✅ **降低人工成本**: 提升问题解决率,降低转接率
-
-**技术栈:**
-- Langfuse: LLM 应用可观测性平台
-- LangChain: LLM 应用开发框架
-- LanceDB: 向量数据库(RAG)
-- OpenAI GPT: 大语言模型
-- Python 3.10+
-
-**快速开始:**
-```bash
-cd smart-customer-service
-make setup          # 初始化项目
-make verify         # 验证配置
-make run-demo       # 运行演示
-```
-
-📖 [查看详细文档](smart-customer-service/README.md)
-
----
-
-### 2. [MCP with Tracing](mcp-with-tracing/) - MCP 可观测性平台
+### 1. [MCP with Tracing](mcp-with-tracing/) - MCP 可观测性平台
 
 生产级 LLM 可观测性平台，基于 Langfuse 为 MCP Server 提供完整的追踪、监控和告警能力。
 
@@ -69,6 +40,35 @@ python src/server.py
 ```
 
 📖 [查看详细文档](mcp-with-tracing/README.md)
+
+---
+
+### 2. [Smart Customer Service](smart-customer-service/) - 智能客服系统
+
+基于 Langfuse 构建的智能客服系统,实现会话路径全链路追踪与高频失败问题分析。
+
+**核心价值:**
+- ✅ **全链路可观测**: 打破智能客服会话黑盒,从进线到结束完整追踪
+- ✅ **失败根因定位**: 标准化埋点体系,快速定位问题根因
+- ✅ **数据驱动优化**: A/B测试验证,量化优化效果
+- ✅ **降低人工成本**: 提升问题解决率,降低转接率
+
+**技术栈:**
+- Langfuse: LLM 应用可观测性平台
+- LangChain: LLM 应用开发框架
+- LanceDB: 向量数据库(RAG)
+- OpenAI GPT: 大语言模型
+- Python 3.10+
+
+**快速开始:**
+```bash
+cd smart-customer-service
+make setup          # 初始化项目
+make verify         # 验证配置
+make run-demo       # 运行演示
+```
+
+📖 [查看详细文档](smart-customer-service/README.md)
 
 ---
 

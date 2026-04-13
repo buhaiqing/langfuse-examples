@@ -19,6 +19,12 @@
 - ✅ Phase 5: 告警与通知（企业微信、Slack、Email等）
 - ✅ Phase 6: 智能告警(ML) - Prophet+PyOD异常检测
 
+**告警系统**:
+项目包含两套并行的告警系统：
+- **传统告警 (Phase 5)**: 基于固定阈值的规则引擎，适合明确的业务规则
+- **智能告警 (Phase 6)**: 基于机器学习的异常检测，自动发现未知异常模式
+- 两者互补运行，共享通知渠道，统一告警存储
+
 ## 快速开始
 
 ### 1. 安装依赖
@@ -39,14 +45,20 @@ LANGFUSE_SECRET_KEY=sk-lf-xxx
 LANGFUSE_HOST=https://cloud.langfuse.com
 ```
 
-**可选**: 配置企业微信告警通知
+**可选**: 配置告警通知
 
 ```bash
-# 获取 Webhook URL: https://work.weixin.qq.com/api/doc/90000/90136/91770
+# 企业微信 Webhook URL
 WECOM_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY
+
+# 告警检查间隔（分钟）
+ALERT_CHECK_INTERVAL_MINUTES=5              # 传统告警（Phase 5）
+SMART_ALERT_CHECK_INTERVAL_MINUTES=10       # 智能告警（Phase 6）
 ```
 
-详细配置指南: [docs/WECOM_QUICK_START.md](docs/WECOM_QUICK_START.md)
+详细配置指南: 
+- [企业微信配置](docs/WECOM_QUICK_START.md)
+- [智能告警快速启动](docs/phase6-quick-start.md)
 
 ### 3. 运行服务器
 
@@ -94,7 +106,11 @@ example2/
 │       ├── session.py         # 会话追踪
 │       ├── prompt_versioning.py # 提示词版本管理
 │       ├── feedback.py        # 反馈收集
-│       ├── alerting.py        # 告警管理
+│       ├── alerting.py        # 告警管理 (Phase 5)
+│       ├── alert_monitor.py   # 告警监控调度器 (Phase 5)
+│       ├── smart_alerting.py  # 智能告警管理器 (Phase 6)
+│       ├── anomaly_detector.py # 异常检测引擎 (Phase 6)
+│       ├── metrics_collector.py # 指标收集器 (Phase 6)
 │       └── notifiers.py       # 通知渠道（企业微信、Slack等）
 ├── tests/                     # 单元测试
 ├── scripts/                   # 测试和配置脚本
