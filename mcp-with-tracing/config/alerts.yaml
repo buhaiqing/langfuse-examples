@@ -1,0 +1,172 @@
+# Alert Rules Configuration
+# =========================
+# This file defines alert rules that are automatically loaded on server startup.
+# 
+# Structure:
+#   alerts:
+#     - name: <unique rule name>
+#       metric: <metric to monitor>
+#       threshold: <numeric threshold value>
+#       operator: <gt|lt|gte|lte|eq>
+#       severity: <info|warning|critical>
+#       window_minutes: <time window in minutes, default: 60>
+#       channels: [<notification channels>]
+#       enabled: <true|false, default: true>
+#       metadata:
+#         key: value
+#
+# Available notification channels:
+#   - wecom (Enterprise WeChat)
+#   - slack
+#   - email
+#   - pagerduty
+#   - webhook (custom webhook)
+#
+# Operators:
+#   - gt: greater than (>)
+#   - lt: less than (<)
+#   - gte: greater than or equal (>=)
+#   - lte: less than or equal (<=)
+#   - eq: equal (==)
+#
+# Severity levels:
+#   - info: Informational alerts
+#   - warning: Warning alerts (performance degradation)
+#   - critical: Critical alerts (service disruption)
+
+alerts:
+  # ========================================================================
+  # Success Rate Alerts
+  # ========================================================================
+  
+  - name: "success-rate-low-warning"
+    description: "Success rate dropped below acceptable threshold"
+    metric: "success_rate"
+    threshold: 0.95
+    operator: "lt"
+    severity: "warning"
+    window_minutes: 60
+    channels:
+      - "wecom"
+      - "slack"
+    enabled: true
+    metadata:
+      team: "backend"
+      escalation_policy: "on-call-engineer"
+      runbook_url: "https://wiki.example.com/runbooks/success-rate-low"
+
+  - name: "success-rate-critical"
+    description: "Success rate critically low - immediate action required"
+    metric: "success_rate"
+    threshold: 0.90
+    operator: "lt"
+    severity: "critical"
+    window_minutes: 30
+    channels:
+      - "wecom"
+      - "pagerduty"
+      - "email"
+    enabled: true
+    metadata:
+      team: "backend"
+      escalation_policy: "immediate-page"
+      auto_escalate_after_minutes: 15
+
+  # ========================================================================
+  # Latency Alerts
+  # ========================================================================
+  
+  - name: "latency-p95-high-warning"
+    description: "P95 latency exceeded warning threshold"
+    metric: "latency_p95_ms"
+    threshold: 500
+    operator: "gt"
+    severity: "warning"
+    window_minutes: 60
+    channels:
+      - "wecom"
+      - "slack"
+    enabled: true
+    metadata:
+      team: "performance"
+      impact: "User experience degradation"
+
+  - name: "latency-p95-critical"
+    description: "P95 latency critically high"
+    metric: "latency_p95_ms"
+    threshold: 1000
+    operator: "gt"
+    severity: "critical"
+    window_minutes: 30
+    channels:
+      - "wecom"
+      - "pagerduty"
+    enabled: true
+    metadata:
+      team: "performance"
+      impact: "Severe user experience impact"
+
+  - name: "latency-p99-high"
+    description: "P99 latency exceeded threshold (tail latency)"
+    metric: "latency_p99_ms"
+    threshold: 2000
+    operator: "gt"
+    severity: "warning"
+    window_minutes: 60
+    channels:
+      - "slack"
+    enabled: false  # Disabled by default, enable if needed
+    metadata:
+      team: "performance"
+      note: "Monitor tail latency for SLA compliance"
+
+  # ========================================================================
+  # Custom Metric Alerts (Examples)
+  # ========================================================================
+  
+  - name: "feedback-rating-low"
+    description: "Average user rating dropped below threshold"
+    metric: "avg_rating"
+    threshold: 3.5
+    operator: "lt"
+    severity: "warning"
+    window_minutes: 120
+    channels:
+      - "email"
+    enabled: true
+    metadata:
+      team: "product"
+      action: "Review recent user feedback comments"
+
+  - name: "error-rate-spike"
+    description: "Error rate spike detected"
+    metric: "error_rate"
+    threshold: 0.05
+    operator: "gt"
+    severity: "critical"
+    window_minutes: 15
+    channels:
+      - "wecom"
+      - "pagerduty"
+    enabled: true
+    metadata:
+      team: "backend"
+      auto_rollback: true
+
+  # ========================================================================
+  # Development/Test Alerts (Disabled in Production)
+  # ========================================================================
+  
+  - name: "test-alert-info"
+    description: "Test alert for notification channel verification"
+    metric: "test_metric"
+    threshold: 100
+    operator: "gt"
+    severity: "info"
+    window_minutes: 60
+    channels:
+      - "webhook"
+    enabled: false  # Only enable for testing
+    metadata:
+      purpose: "testing"
+      environment: "development"

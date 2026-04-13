@@ -2,6 +2,7 @@
 MCP Server entry point.
 """
 
+import asyncio
 from fastmcp import FastMCP
 
 from src.observability import (
@@ -16,6 +17,8 @@ from src.observability.feedback import (
     record_rating,
 )
 from src.observability.session import get_session_id
+from src.observability.alert_config_loader import load_alert_rules
+from src.observability.alert_monitor import start_alert_monitor
 
 mcp = FastMCP("MCP Langfuse Observability Server")
 
@@ -157,6 +160,35 @@ def main():
     """Run the MCP server."""
     config = ObservabilityConfig()
     init_observability(config)
+
+    # Load alert rules from configuration file
+    print("\n" + "=" * 60)
+    print("Loading alert rules...")
+    print("=" * 60)
+    try:
+        rules_count = load_alert_rules()
+        if rules_count == 0:
+            print("⚠️  No alert rules loaded. Use API or scripts to configure alerts.")
+    except Exception as e:
+        print(f"❌ Failed to load alert rules: {e}")
+        print("   Server will start without alert rules.")
+    print("=" * 60 + "\n")
+
+    # Start background alert monitoring
+    print("=" * 60)
+    print("Starting alert monitoring...")
+    print("=" * 60)
+    try:
+        import os
+
+        check_interval = int(os.getenv("ALERT_CHECK_INTERVAL_MINUTES", "5"))
+        monitor = start_alert_monitor(check_interval_minutes=check_interval)
+        print(f"✅ Alert monitoring enabled (every {check_interval} minutes)")
+    except Exception as e:
+        print(f"❌ Failed to start alert monitor: {e}")
+        print("   Server will run without automatic alert checking.")
+    print("=" * 60 + "\n")
+
     mcp.run()
 
 

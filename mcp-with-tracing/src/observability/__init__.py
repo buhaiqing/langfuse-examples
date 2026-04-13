@@ -42,6 +42,13 @@ from src.observability.feedback import (
 from src.observability.smart_alerting import SmartAlertManager
 from src.observability.anomaly_detector import AnomalyDetector
 from src.observability.metrics_collector import MetricsCollector
+from src.observability.alert_monitor import (
+    AlertMonitorScheduler,
+    get_alert_monitor,
+    start_alert_monitor,
+    stop_alert_monitor,
+)
+from src.observability.alert_config_loader import validate_alert_config
 
 __all__ = [
     "ObservabilityConfig",
@@ -78,4 +85,9 @@ __all__ = [
     "SmartAlertManager",
     "AnomalyDetector",
     "MetricsCollector",
+    "AlertMonitorScheduler",
+    "get_alert_monitor",
+    "start_alert_monitor",
+    "stop_alert_monitor",
+    "validate_alert_config",
 ]

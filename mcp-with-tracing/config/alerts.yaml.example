@@ -1,0 +1,146 @@
+# Alert Rules Configuration Example
+# ===================================
+# This is an example configuration file showing all available options.
+# Copy this file to alerts.yaml and modify according to your needs.
+
+alerts:
+  # ========================================================================
+  # Example 1: Success Rate Monitoring
+  # ========================================================================
+  
+  - name: "success-rate-warning"
+    description: "Success rate dropped below acceptable threshold"
+    metric: "success_rate"
+    threshold: 0.95
+    operator: "lt"
+    severity: "warning"
+    window_minutes: 60
+    channels:
+      - "wecom"
+      - "slack"
+    enabled: true
+    metadata:
+      team: "backend"
+      escalation_policy: "on-call-engineer"
+      runbook_url: "https://wiki.example.com/runbooks/success-rate"
+
+  - name: "success-rate-critical"
+    description: "Success rate critically low - immediate action required"
+    metric: "success_rate"
+    threshold: 0.90
+    operator: "lt"
+    severity: "critical"
+    window_minutes: 30
+    channels:
+      - "wecom"
+      - "pagerduty"
+      - "email"
+    enabled: true
+    metadata:
+      team: "backend"
+      escalation_policy: "immediate-page"
+      auto_escalate_after_minutes: 15
+
+  # ========================================================================
+  # Example 2: Latency Monitoring
+  # ========================================================================
+  
+  - name: "latency-p95-warning"
+    description: "P95 latency exceeded warning threshold"
+    metric: "latency_p95_ms"
+    threshold: 500
+    operator: "gt"
+    severity: "warning"
+    window_minutes: 60
+    channels:
+      - "wecom"
+      - "slack"
+    enabled: true
+    metadata:
+      team: "performance"
+      impact: "User experience degradation"
+
+  - name: "latency-p95-critical"
+    description: "P95 latency critically high"
+    metric: "latency_p95_ms"
+    threshold: 1000
+    operator: "gt"
+    severity: "critical"
+    window_minutes: 30
+    channels:
+      - "wecom"
+      - "pagerduty"
+    enabled: true
+    metadata:
+      team: "performance"
+      impact: "Severe user experience impact"
+
+  # P99 latency (tail latency monitoring)
+  - name: "latency-p99-monitoring"
+    description: "P99 latency monitoring for SLA compliance"
+    metric: "latency_p99_ms"
+    threshold: 2000
+    operator: "gt"
+    severity: "warning"
+    window_minutes: 60
+    channels:
+      - "slack"
+    enabled: false  # Disabled by default
+    metadata:
+      team: "performance"
+      note: "Monitor tail latency for SLA compliance"
+
+  # ========================================================================
+  # Example 3: User Satisfaction
+  # ========================================================================
+  
+  - name: "user-rating-low"
+    description: "Average user rating dropped below threshold"
+    metric: "avg_rating"
+    threshold: 3.5
+    operator: "lt"
+    severity: "warning"
+    window_minutes: 120
+    channels:
+      - "email"
+    enabled: true
+    metadata:
+      team: "product"
+      action: "Review recent user feedback comments"
+
+  # ========================================================================
+  # Example 4: Error Rate
+  # ========================================================================
+  
+  - name: "error-rate-spike"
+    description: "Error rate spike detected"
+    metric: "error_rate"
+    threshold: 0.05
+    operator: "gt"
+    severity: "critical"
+    window_minutes: 15
+    channels:
+      - "wecom"
+      - "pagerduty"
+    enabled: true
+    metadata:
+      team: "backend"
+      auto_rollback: true
+
+  # ========================================================================
+  # Example 5: Test/Development Rule (Disabled)
+  # ========================================================================
+  
+  - name: "test-alert-info"
+    description: "Test alert for notification channel verification"
+    metric: "test_metric"
+    threshold: 100
+    operator: "gt"
+    severity: "info"
+    window_minutes: 60
+    channels:
+      - "webhook"
+    enabled: false  # Only enable for testing
+    metadata:
+      purpose: "testing"
+      environment: "development"
