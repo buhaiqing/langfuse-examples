@@ -1,32 +1,50 @@
-"""Redis 会话存储后端"""
+"""Redis 会话存储后端 - 连接池优化版
+
+使用 Redis 连接池提高性能和可靠性
+支持连接健康检查、自动重连和连接数监控
+"""
 
 import json
-import redis.asyncio as redis
-from typing import Optional, Dict, Any, List
+import time
+import logging
+from typing import Optional, Dict, Any, List, Callable
 from datetime import datetime, timedelta
 from dataclasses import dataclass, asdict
+from functools import wraps
+
+import redis.asyncio as redis
+from redis.asyncio import ConnectionPool, Redis
+from redis.exceptions import ConnectionError, TimeoutError, RedisError
 
 from core.config import settings
+
+logger = logging.getLogger(__name__)
 
 
 # ==================== 数据模型 ====================
 @dataclass
 class ConversationState:
     """会话状态"""
-
     session_id: str
     user_id: str
-    current_intent: Optional[str]
-    collected_slots: Dict[str, Any]
-    turn_count: int
-    created_at: str
-    updated_at: str
+    current_intent: Optional[str] = None
+    collected_slots: Dict[str, Any] = None
+    turn_count: int = 0
+    created_at: str = None
+    updated_at: str = None
+
+    def __post_init__(self):
+        if self.collected_slots is None:
+            self.collected_slots = {}
+        if self.created_at is None:
+            self.created_at = datetime.utcnow().isoformat()
+        if self.updated_at is None:
+            self.updated_at = datetime.utcnow().isoformat()
 
 
 # ==================== Redis 键前缀 ====================
 class RedisKeys:
     """Redis 键命名规范"""
-
     SESSION_STATE = "session:{session_id}:state"
     SESSION_HISTORY = "session:{session_id}:history"
     USER_PROFILE = "user:{user_id}:profile"
@@ -64,84 +82,211 @@ class RedisKeys:
         return cls.CACHE_PRODUCT.format(product_id=product_id)
 
 
+# ==================== 连接池配置 ====================
+@dataclass
+class RedisPoolConfig:
+    """Redis 连接池配置"""
+    max_connections: int = 100
+    min_idle_connections: int = 10
+    connection_timeout: float = 30.0
+    socket_timeout: float = 5.0
+    socket_connect_timeout: float = 5.0
+    socket_keepalive: bool = True
+    health_check_interval: int = 30
+    retry_on_timeout: bool = True
+
+
+def with_retry(max_retries: int = 3, retry_delay: float = 0.1):
+    """重试装饰器"""
+    def decorator(func: Callable) -> Callable:
+        @wraps(func)
+        async def wrapper(self, *args, **kwargs):
+            last_exception = None
+            for attempt in range(max_retries):
+                try:
+                    return await func(self, *args, **kwargs)
+                except (ConnectionError, TimeoutError) as e:
+                    last_exception = e
+                    if attempt < max_retries - 1:
+                        logger.warning(f"Redis 操作失败，第 {attempt + 1} 次重试: {e}")
+                        await asyncio.sleep(retry_delay * (2 ** attempt))
+                        # 尝试重新连接
+                        await self._reconnect()
+                    else:
+                        raise
+            raise last_exception
+        return wrapper
+    return decorator
+
+
+import asyncio
+
+
 # ==================== Redis 客户端 ====================
 class RedisClient:
-    """Redis 客户端封装"""
+    """Redis 客户端封装 - 连接池优化版"""
 
-    def __init__(self):
-        self.client: Optional[redis.Redis] = None
+    def __init__(self, config: Optional[RedisPoolConfig] = None):
+        self.config = config or RedisPoolConfig(
+            max_connections=settings.redis_max_connections,
+            min_idle_connections=settings.redis_min_idle_connections,
+            connection_timeout=settings.redis_connection_timeout,
+            socket_timeout=settings.redis_socket_timeout,
+        )
+        self._pool: Optional[ConnectionPool] = None
+        self._client: Optional[Redis] = None
         self._ttl_seconds = settings.redis_ttl_hours * 3600
+        self._connected = False
+        self._connection_lock = asyncio.Lock()
+        self._health_check_task: Optional[asyncio.Task] = None
 
     async def connect(self) -> None:
-        """连接 Redis"""
-        self.client = redis.Redis(
-            host=settings.redis_host,
-            port=settings.redis_port,
-            db=settings.redis_db,
-            password=settings.redis_password,
-            decode_responses=True,
-        )
+        """初始化 Redis 连接池"""
+        async with self._connection_lock:
+            if self._connected:
+                return
+
+            try:
+                # 构建连接 URL
+                if settings.redis_url:
+                    connection_url = settings.redis_url
+                else:
+                    password_part = f":{settings.redis_password}@" if settings.redis_password else ""
+                    connection_url = f"redis://{password_part}{settings.redis_host}:{settings.redis_port}/{settings.redis_db}"
+
+                # 创建连接池
+                self._pool = ConnectionPool.from_url(
+                    connection_url,
+                    max_connections=self.config.max_connections,
+                    socket_timeout=self.config.socket_timeout,
+                    socket_connect_timeout=self.config.socket_connect_timeout,
+                    socket_keepalive=self.config.socket_keepalive,
+                    health_check_interval=self.config.health_check_interval,
+                    retry_on_timeout=self.config.retry_on_timeout,
+                )
+
+                # 创建客户端
+                self._client = Redis(connection_pool=self._pool)
+
+                # 测试连接
+                await self._client.ping()
+
+                self._connected = True
+                logger.info(f"Redis 连接池初始化成功 (max={self.config.max_connections})")
+
+                # 启动健康检查
+                self._start_health_check()
+
+            except Exception as e:
+                logger.error(f"Redis 连接失败: {e}")
+                raise
+
+    async def _reconnect(self) -> None:
+        """重新连接"""
+        async with self._connection_lock:
+            if self._connected:
+                try:
+                    await self._client.ping()
+                    return  # 连接正常
+                except:
+                    pass
+
+            # 关闭现有连接
+            await self._close_connection()
+
+            # 重新连接
+            try:
+                await self.connect()
+                logger.info("Redis 重连成功")
+            except Exception as e:
+                logger.error(f"Redis 重连失败: {e}")
+                raise
+
+    async def _close_connection(self) -> None:
+        """关闭连接"""
+        self._connected = False
+        if self._health_check_task:
+            self._health_check_task.cancel()
+            try:
+                await self._health_check_task
+            except asyncio.CancelledError:
+                pass
+            self._health_check_task = None
+
+        if self._client:
+            await self._client.close()
+            self._client = None
+
+        if self._pool:
+            await self._pool.disconnect()
+            self._pool = None
 
     async def close(self) -> None:
-        """关闭连接"""
-        if self.client:
-            await self.client.close()
+        """关闭连接池"""
+        await self._close_connection()
+        logger.info("Redis 连接池已关闭")
 
     async def ping(self) -> bool:
         """检查连接"""
+        if not self._connected or not self._client:
+            return False
         try:
-            return await self.client.ping()
+            return await self._client.ping()
         except Exception:
             return False
 
-    # ==================== 会话状态管理 ====================
-    async def save_session_state(self, state: ConversationState) -> None:
-        """
-        保存会话状态
+    def _start_health_check(self) -> None:
+        """启动健康检查任务"""
+        if self._health_check_task is None:
+            self._health_check_task = asyncio.create_task(self._health_check_loop())
 
-        Args:
-            state: 会话状态对象
-        """
+    async def _health_check_loop(self) -> None:
+        """健康检查循环"""
+        while self._connected:
+            try:
+                await asyncio.sleep(self.config.health_check_interval)
+                if self._client:
+                    await self._client.ping()
+            except asyncio.CancelledError:
+                break
+            except Exception as e:
+                logger.warning(f"Redis 健康检查失败: {e}")
+                try:
+                    await self._reconnect()
+                except:
+                    pass
+
+    def _get_ttl(self, custom_ttl: Optional[int] = None) -> int:
+        """获取 TTL"""
+        return custom_ttl if custom_ttl is not None else self._ttl_seconds
+
+    # ==================== 会话状态管理 ====================
+    @with_retry(max_retries=3)
+    async def save_session_state(self, state: ConversationState, ttl: Optional[int] = None) -> None:
+        """保存会话状态"""
         key = RedisKeys.session_state(state.session_id)
         data = asdict(state)
-        await self.client.setex(key, self._ttl_seconds, json.dumps(data, ensure_ascii=False))
+        await self._client.setex(key, self._get_ttl(ttl), json.dumps(data, ensure_ascii=False))
 
+    @with_retry(max_retries=3)
     async def get_session_state(self, session_id: str) -> Optional[ConversationState]:
-        """
-        获取会话状态
-
-        Args:
-            session_id: 会话 ID
-
-        Returns:
-            会话状态或 None
-        """
+        """获取会话状态"""
         key = RedisKeys.session_state(session_id)
-        data = await self.client.get(key)
+        data = await self._client.get(key)
+        return ConversationState(**json.loads(data)) if data else None
 
-        if not data:
-            return None
-
-        return ConversationState(**json.loads(data))
-
+    @with_retry(max_retries=3)
     async def delete_session_state(self, session_id: str) -> None:
         """删除会话状态"""
         key = RedisKeys.session_state(session_id)
-        await self.client.delete(key)
+        await self._client.delete(key)
 
     # ==================== 会话历史管理 ====================
+    @with_retry(max_retries=3)
     async def add_message_to_history(
         self, session_id: str, role: str, content: str, metadata: Optional[Dict[str, Any]] = None
     ) -> None:
-        """
-        添加消息到会话历史
-
-        Args:
-            session_id: 会话 ID
-            role: 角色 (user/assistant)
-            content: 消息内容
-            metadata: 元数据
-        """
+        """添加消息到会话历史"""
         key = RedisKeys.session_history(session_id)
         message = {
             "role": role,
@@ -149,115 +294,82 @@ class RedisClient:
             "metadata": metadata or {},
             "timestamp": datetime.utcnow().isoformat(),
         }
+        await self._client.rpush(key, json.dumps(message, ensure_ascii=False))
+        await self._client.expire(key, self._ttl_seconds)
 
-        await self.client.rpush(key, json.dumps(message, ensure_ascii=False))
-
-        # 设置 TTL
-        await self.client.expire(key, self._ttl_seconds)
-
+    @with_retry(max_retries=3)
     async def get_session_history(self, session_id: str, limit: int = 50) -> List[Dict[str, Any]]:
-        """
-        获取会话历史
-
-        Args:
-            session_id: 会话 ID
-            limit: 返回条数限制
-
-        Returns:
-            消息列表
-        """
+        """获取会话历史"""
         key = RedisKeys.session_history(session_id)
-        messages = await self.client.lrange(key, -limit, -1)
-
+        messages = await self._client.lrange(key, -limit, -1)
         return [json.loads(msg) for msg in messages]
 
+    @with_retry(max_retries=3)
     async def clear_session_history(self, session_id: str) -> None:
         """清除会话历史"""
         key = RedisKeys.session_history(session_id)
-        await self.client.delete(key)
+        await self._client.delete(key)
 
     # ==================== 用户画像管理 ====================
-    async def save_user_profile(self, user_id: str, profile: Dict[str, Any]) -> None:
-        """
-        保存用户画像
-
-        Args:
-            user_id: 用户 ID
-            profile: 用户画像数据
-        """
+    @with_retry(max_retries=3)
+    async def save_user_profile(self, user_id: str, profile: Dict[str, Any], ttl: Optional[int] = None) -> None:
+        """保存用户画像"""
         key = RedisKeys.user_profile(user_id)
-        ttl = 7 * 24 * 3600  # 7 天
+        ttl = ttl or (7 * 24 * 3600)  # 7 天
+        await self._client.setex(key, ttl, json.dumps(profile, ensure_ascii=False))
 
-        await self.client.setex(key, ttl, json.dumps(profile, ensure_ascii=False))
-
+    @with_retry(max_retries=3)
     async def get_user_profile(self, user_id: str) -> Optional[Dict[str, Any]]:
         """获取用户画像"""
         key = RedisKeys.user_profile(user_id)
-        data = await self.client.get(key)
+        data = await self._client.get(key)
+        return json.loads(data) if data else None
 
-        if not data:
-            return None
-
-        return json.loads(data)
-
+    @with_retry(max_retries=3)
     async def update_user_profile(self, user_id: str, updates: Dict[str, Any]) -> None:
-        """
-        更新用户画像
-
-        Args:
-            user_id: 用户 ID
-            updates: 更新数据
-        """
+        """更新用户画像"""
         current = await self.get_user_profile(user_id) or {}
         current.update(updates)
         await self.save_user_profile(user_id, current)
 
     # ==================== 缓存管理 ====================
+    @with_retry(max_retries=3)
     async def cache_set(self, key: str, value: Any, ttl_seconds: int = 3600) -> None:
         """设置缓存"""
-        await self.client.setex(key, ttl_seconds, json.dumps(value, ensure_ascii=False))
+        await self._client.setex(key, ttl_seconds, json.dumps(value, ensure_ascii=False))
 
+    @with_retry(max_retries=3)
     async def cache_get(self, key: str) -> Optional[Any]:
         """获取缓存"""
-        data = await self.client.get(key)
+        data = await self._client.get(key)
         return json.loads(data) if data else None
 
+    @with_retry(max_retries=3)
     async def cache_delete(self, key: str) -> None:
         """删除缓存"""
-        await self.client.delete(key)
+        await self._client.delete(key)
 
     # ==================== 速率限制管理 ====================
+    @with_retry(max_retries=3)
     async def check_rate_limit(
         self, client_id: str, max_requests: int, window_seconds: int
     ) -> tuple[bool, int]:
-        """
-        检查速率限制（使用 Redis Sorted Set 实现滑动窗口）
-
-        Args:
-            client_id: 客户端标识
-            max_requests: 最大请求数
-            window_seconds: 时间窗口（秒）
-
-        Returns:
-            Tuple[bool, int]: (是否允许，重试等待秒数)
-        """
+        """检查速率限制（滑动窗口）"""
         key = RedisKeys.RATE_LIMIT.format(client_id=client_id)
         current_time = time.time()
         window_start = current_time - window_seconds
 
-        # 使用 Redis pipeline
-        pipe = self.client.pipeline()
-        pipe.zremrangebyscore(key, 0, window_start)  # 清理旧记录
-        pipe.zadd(key, {f"{current_time}": current_time})  # 添加新记录
-        pipe.zcard(key)  # 计数
-        pipe.expire(key, window_seconds * 2)  # 设置过期
+        pipe = self._client.pipeline()
+        pipe.zremrangebyscore(key, 0, window_start)
+        pipe.zadd(key, {f"{current_time}": current_time})
+        pipe.zcard(key)
+        pipe.expire(key, window_seconds * 2)
         results = await pipe.execute()
 
         request_count = results[2]
 
         if request_count > max_requests:
-            # 计算需要等待的时间
-            oldest_request = await self.client.zrange(key, 0, 0, withscores=True)
+            oldest_request = await self._client.zrange(key, 0, 0, withscores=True)
             if oldest_request:
                 retry_after = int(oldest_request[0][1] + window_seconds - current_time) + 1
                 return False, max(retry_after, 1)
@@ -265,79 +377,87 @@ class RedisClient:
 
         return True, 0
 
+    @with_retry(max_retries=3)
     async def get_rate_limit_count(self, client_id: str, window_seconds: int) -> int:
         """获取当前窗口内的请求数"""
         key = RedisKeys.RATE_LIMIT.format(client_id=client_id)
         window_start = time.time() - window_seconds
-        return await self.client.zcount(key, window_start, time.time())
+        return await self._client.zcount(key, window_start, time.time())
 
+    @with_retry(max_retries=3)
     async def reset_rate_limit(self, client_id: str) -> None:
         """重置速率限制"""
         key = RedisKeys.RATE_LIMIT.format(client_id=client_id)
-        await self.client.delete(key)
+        await self._client.delete(key)
 
     # ==================== WebSocket 连接管理 ====================
+    @with_retry(max_retries=3)
     async def add_websocket_connection(self, client_id: str, connection_data: dict) -> None:
         """添加 WebSocket 连接"""
-        pipe = self.client.pipeline()
+        pipe = self._client.pipeline()
         pipe.hset(
             RedisKeys.WEBSOCKET_CONNECTIONS,
             client_id,
             json.dumps(connection_data, ensure_ascii=False),
         )
-
         if connection_data.get("is_agent"):
             pipe.sadd(RedisKeys.WEBSOCKET_AGENTS, client_id)
         else:
             pipe.sadd(RedisKeys.WEBSOCKET_USERS, client_id)
-
         await pipe.execute()
 
+    @with_retry(max_retries=3)
     async def remove_websocket_connection(self, client_id: str) -> None:
         """移除 WebSocket 连接"""
-        pipe = self.client.pipeline()
+        pipe = self._client.pipeline()
         pipe.hdel(RedisKeys.WEBSOCKET_CONNECTIONS, client_id)
         pipe.srem(RedisKeys.WEBSOCKET_AGENTS, client_id)
         pipe.srem(RedisKeys.WEBSOCKET_USERS, client_id)
         await pipe.execute()
 
+    @with_retry(max_retries=3)
     async def get_websocket_connection(self, client_id: str) -> Optional[dict]:
         """获取 WebSocket 连接信息"""
-        data = await self.client.hget(RedisKeys.WEBSOCKET_CONNECTIONS, client_id)
+        data = await self._client.hget(RedisKeys.WEBSOCKET_CONNECTIONS, client_id)
         return json.loads(data) if data else None
 
-    async def get_websocket_agents(self) -> set[str]:
+    @with_retry(max_retries=3)
+    async def get_websocket_agents(self) -> set:
         """获取所有客服 WebSocket 连接"""
-        return await self.client.smembers(RedisKeys.WEBSOCKET_AGENTS)
+        return await self._client.smembers(RedisKeys.WEBSOCKET_AGENTS)
 
-    async def get_websocket_users(self) -> set[str]:
+    @with_retry(max_retries=3)
+    async def get_websocket_users(self) -> set:
         """获取所有用户 WebSocket 连接"""
-        return await self.client.smembers(RedisKeys.WEBSOCKET_USERS)
+        return await self._client.smembers(RedisKeys.WEBSOCKET_USERS)
 
+    @with_retry(max_retries=3)
     async def get_websocket_stats(self) -> dict:
         """获取 WebSocket 连接统计"""
-        pipe = self.client.pipeline()
+        pipe = self._client.pipeline()
         pipe.hlen(RedisKeys.WEBSOCKET_CONNECTIONS)
         pipe.scard(RedisKeys.WEBSOCKET_AGENTS)
         pipe.scard(RedisKeys.WEBSOCKET_USERS)
         results = await pipe.execute()
-
         return {
             "total_connections": results[0],
             "agent_connections": results[1],
             "user_connections": results[2],
         }
 
+    @with_retry(max_retries=3)
     async def publish_websocket_message(self, channel: str, message: dict) -> int:
         """发布 WebSocket 消息到频道"""
-        return await self.client.publish(
-            f"{RedisKeys.WEBSOCKET_CHANNEL}:{channel}", json.dumps(message, ensure_ascii=False)
+        return await self._client.publish(
+            f"{RedisKeys.WEBSOCKET_CHANNEL}:{channel}",
+            json.dumps(message, ensure_ascii=False)
         )
 
     # ==================== 客服状态管理 ====================
+    @with_retry(max_retries=3)
     async def set_agent_status(self, agent_id: str, status: str, concurrent_chats: int) -> None:
         """设置客服状态"""
-        await self.client.hset(
+        await self._client.hset(
             RedisKeys.AGENT_STATUS.format(agent_id=agent_id),
             mapping={
                 "status": status,
@@ -345,97 +465,77 @@ class RedisClient:
                 "updated_at": datetime.utcnow().isoformat(),
             },
         )
-        await self.client.expire(
+        await self._client.expire(
             RedisKeys.AGENT_STATUS.format(agent_id=agent_id),
             3600,  # 1 小时过期
         )
 
+    @with_retry(max_retries=3)
     async def get_agent_status(self, agent_id: str) -> Optional[dict]:
         """获取客服状态"""
-        data = await self.client.hgetall(RedisKeys.AGENT_STATUS.format(agent_id=agent_id))
+        data = await self._client.hgetall(RedisKeys.AGENT_STATUS.format(agent_id=agent_id))
         if not data:
             return None
-
         return {
-            "status": data.get(b"status", b"offline").decode(),
-            "concurrent_chats": int(data.get(b"concurrent_chats", 0)),
-            "updated_at": data.get(b"updated_at", b"").decode(),
+            "status": data.get("status", "offline"),
+            "concurrent_chats": int(data.get("concurrent_chats", 0)),
+            "updated_at": data.get("updated_at", ""),
         }
 
-    async def get_multiple_agent_status(self, agent_ids: List[str]) -> Dict[str, Optional[dict]]:
-        """
-        批量获取客服状态 - 使用 Pipeline 优化性能
-        
-        Args:
-            agent_ids: 客服 ID 列表
-            
-        Returns:
-            Dict[str, Optional[dict]]: 客服 ID -> 状态的字典
-        """
-        if not agent_ids:
-            return {}
-
-        # 使用 Pipeline 批量执行 HGETALL 命令
-        pipe = self.client.pipeline()
-        for agent_id in agent_ids:
-            pipe.hgetall(RedisKeys.AGENT_STATUS.format(agent_id=agent_id))
-        
-        results = await pipe.execute()
-        
-        # 解析结果
-        status_map = {}
-        for agent_id, data in zip(agent_ids, results):
-            if data:
-                status_map[agent_id] = {
-                    "status": data.get(b"status", b"offline").decode(),
-                    "concurrent_chats": int(data.get(b"concurrent_chats", 0)),
-                    "updated_at": data.get(b"updated_at", b"").decode(),
-                }
-            else:
-                status_map[agent_id] = None
-        
-        return status_map
-
     # ==================== 升级队列管理 ====================
+    @with_retry(max_retries=3)
     async def add_to_escalation_queue(self, conversation_id: str, priority_score: float) -> None:
-        """
-        添加到升级队列
+        """添加到升级队列"""
+        await self._client.zadd(RedisKeys.QUEUE_ESCALATION, {conversation_id: priority_score})
 
-        Args:
-            conversation_id: 会话 ID
-            priority_score: 优先级分数
-        """
-        await self.client.zadd(RedisKeys.QUEUE_ESCALATION, {conversation_id: priority_score})
-
+    @with_retry(max_retries=3)
     async def get_next_escalation(self) -> Optional[str]:
         """获取下一个升级会话 (最高优先级)"""
-        result = await self.client.zpopmax(RedisKeys.QUEUE_ESCALATION, count=1)
+        result = await self._client.zpopmax(RedisKeys.QUEUE_ESCALATION, count=1)
+        return result[0][0] if result else None
 
-        if not result:
-            return None
-
-        return result[0][0]
-
+    @with_retry(max_retries=3)
     async def get_escalation_queue_size(self) -> int:
         """获取升级队列大小"""
-        return await self.client.zcard(RedisKeys.QUEUE_ESCALATION)
+        return await self._client.zcard(RedisKeys.QUEUE_ESCALATION)
 
     # ==================== 实时指标管理 ====================
+    @with_retry(max_retries=3)
     async def increment_metric(self, metric_name: str, value: int = 1) -> None:
         """增加指标计数"""
         key = f"{RedisKeys.METRICS_REALTIME}:{metric_name}"
-        await self.client.incrby(key, value)
+        await self._client.incrby(key, value)
 
+    @with_retry(max_retries=3)
     async def get_metric(self, metric_name: str) -> int:
         """获取指标值"""
         key = f"{RedisKeys.METRICS_REALTIME}:{metric_name}"
-        value = await self.client.get(key)
+        value = await self._client.get(key)
         return int(value) if value else 0
 
+    @with_retry(max_retries=3)
     async def reset_metric(self, metric_name: str) -> None:
         """重置指标"""
         key = f"{RedisKeys.METRICS_REALTIME}:{metric_name}"
-        await self.client.delete(key)
+        await self._client.delete(key)
+
+    # ==================== 连接池监控 ====================
+    async def get_pool_stats(self) -> dict:
+        """获取连接池统计信息"""
+        if not self._pool:
+            return {}
+
+        try:
+            # 获取连接池信息
+            return {
+                "max_connections": self._pool.max_connections,
+                "available_connections": len(self._pool.available_connections),
+                "in_use_connections": len(self._pool._in_use_connections),
+                "connection_class": self._pool.connection_class.__name__,
+            }
+        except Exception as e:
+            logger.error(f"获取连接池统计失败: {e}")
+            return {}
 
 
 # 全局 Redis 客户端实例

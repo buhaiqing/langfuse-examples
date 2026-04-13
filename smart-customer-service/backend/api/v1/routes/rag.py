@@ -1,10 +1,11 @@
 """RAG 知识库 API 路由"""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 
 from services.rag_service import rag_service, RAGQueryResult
+from core.exceptions import RAGQueryFailed, ServiceUnavailableException, ErrorCode
 
 
 router = APIRouter(prefix="/rag", tags=["RAG 知识库"])
@@ -33,6 +34,10 @@ async def query_rag(request: RAGQueryRequest):
     RAG 知识库查询接口
 
     基于向量检索和 LLM 生成答案
+
+    Raises:
+        RAGQueryFailed: RAG 查询失败
+        ServiceUnavailableException: 服务不可用
     """
     try:
         result = await rag_service.query(
@@ -53,11 +58,14 @@ async def query_rag(request: RAGQueryRequest):
             message=None,
         )
 
+    except ServiceUnavailableException:
+        # 服务不可用，继续向上抛出
+        raise
     except Exception as e:
-        return RAGQueryResponse(
-            success=False,
-            data=None,
+        # 转换为业务异常
+        raise RAGQueryFailed(
             message=f"RAG 查询失败：{str(e)}",
+            code=ErrorCode.RAG_QUERY_FAILED,
         )
 
 
