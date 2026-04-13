@@ -93,7 +93,7 @@ python scripts/setup_wecom_alerts.py
 ## 项目结构
 
 ```
-example2/
+mcp-with-tracing/
 ├── src/
 │   ├── server.py              # MCP 主服务器
 │   ├── tools/                 # MCP 工具模块
@@ -126,39 +126,6 @@ example2/
 └── requirements.txt           # Python 依赖
 ```
 
-## Phase 1 完成功能
-
-### ✅ 任务 1.1: Langfuse SDK 配置
-- requirements.txt 配置
-- pyproject.toml 项目配置
-- .env.example 环境变量模板
-- ObservabilityConfig 配置类
-
-### ✅ 任务 1.2: 插桩模块
-- init_observability() 初始化函数
-- get_langfuse_client() 客户端获取
-- Session context 上下文管理
-- LangfuseObserver 观测器类
-- 三个核心装饰器
-
-### ✅ 任务 1.3: 工具装饰器
-- @observe_tool - 工具执行追踪
-- @track_session - 会话元数据
-- @track_prompt_version - 提示词版本
-- 示例工具 (echo, calculate)
-
-### ✅ 任务 1.4: Langfuse 控制台验证
-- Langfuse 连接测试通过
-- 追踪数据成功提交
-- Observation ID 正常生成
-- 查看测试：`python scripts/test_langfuse_connection.py`
-
-### ✅ 任务 1.5: 成功/失败追踪
-- 错误捕获机制
-- 成功/失败标记
-- 完整测试覆盖
-- 查看测试：`python scripts/test_success_failure_tracking.py`
-
 ## 测试结果
 
 ### 单元测试
@@ -176,8 +143,9 @@ scripts/test_success_failure_tracking.py: 3/3 passed
 ## 开发文档
 
 - [整体开发计划](devs/DEVELOPMENT_PLAN.md)
-- [Phase 1 详细计划](devs/phase1/phase1_plan.md)
-- [Phase 1 进度追踪](devs/phase1/phase1_progress.md)
+- [当前项目状态](devs/CURRENT_STATUS.md)
+- [Phase 1-6 完成总结](devs/PROJECT_COMPLETION_SUMMARY.md)
+- [执行摘要](devs/EXECUTIVE_SUMMARY.md)
 
 ## 相关文档
 
