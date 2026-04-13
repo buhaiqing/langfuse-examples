@@ -146,25 +146,22 @@ class TestThreadSafety:
 
     def test_concurrent_alert_checking(self):
         """测试并发告警检查的线程安全性"""
-        from src.observability.alerting import AlertManager, AlertSeverity
+        from src.observability.alerting import get_alert_manager, configure_success_rate_alert, AlertSeverity
         
-        manager = AlertManager()
+        manager = get_alert_manager()
+        configure_success_rate_alert(threshold=0.8, severity=AlertSeverity.WARNING)
+        
         results = []
         errors = []
         lock = threading.Lock()
         
         def check_alert(check_num):
             try:
-                # Simulate checking different metrics
-                metric_name = f"metric_{check_num % 5}"
                 value = 0.5 + (check_num % 10) / 20  # Values between 0.5 and 1.0
                 
                 alert = manager.check_rule(
-                    name=metric_name,
-                    value=value,
-                    threshold=0.8,
-                    operator="lt",
-                    severity=AlertSeverity.WARNING
+                    rule_name="success_rate",
+                    current_value=value
                 )
                 
                 with lock:
@@ -327,11 +324,11 @@ class TestRaceConditions:
 
     def test_concurrent_model_training_safety(self):
         """测试并发模型训练的安全性"""
-        from src.observability.anomaly_detector import AnomalyDetector
+        from src.observability.anomaly_detector import TimeSeriesAnomalyDetector
         import pandas as pd
         import numpy as np
         
-        detector = AnomalyDetector()
+        detector = TimeSeriesAnomalyDetector()
         training_results = []
         errors = []
         lock = threading.Lock()
@@ -345,7 +342,7 @@ class TestRaceConditions:
                 df = pd.DataFrame({'ds': dates, 'y': values})
                 
                 metric_name = f"metric_{thread_id}"
-                detector._univariate_detector.train(metric_name, df)
+                detector.train(metric_name, df)  # Use train directly
                 
                 with lock:
                     training_results.append(thread_id)

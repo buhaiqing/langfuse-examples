@@ -2,12 +2,18 @@
 Configuration management for Langfuse observability.
 """
 
-from pydantic_settings import BaseSettings
 from pydantic import Field
+from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
 class ObservabilityConfig(BaseSettings):
     """Langfuse observability configuration."""
+
+    model_config = SettingsConfigDict(
+        env_file=".env",
+        env_file_encoding="utf-8",
+        extra="ignore",
+    )
 
     langfuse_public_key: str = Field(
         default="",
@@ -39,11 +45,6 @@ class ObservabilityConfig(BaseSettings):
         default=None,
         description="Optional user ID for tracing",
     )
-
-    class Config:
-        env_file = ".env"
-        env_file_encoding = "utf-8"
-        extra = "ignore"
 
     def is_configured(self) -> bool:
         """Check if Langfuse credentials are configured."""

@@ -5,82 +5,152 @@ MCP Server entry point.
 from fastmcp import FastMCP
 
 from src.observability import (
-    init_observability,
     ObservabilityConfig,
+    init_observability,
     observe_tool,
-    set_session_context,
 )
-from src.tools.feedback_tool import (
-    submit_feedback_accept,
-    submit_feedback_reject,
-    submit_feedback_rating,
-    submit_feedback_comment,
+from src.observability.feedback import (
+    record_acceptance,
+    record_comment,
+    record_rejection,
+    record_rating,
 )
+from src.observability.session import get_session_id
 
 mcp = FastMCP("MCP Langfuse Observability Server")
 
 
-@mcp.tool()
-@observe_tool(name="echo_tool")
-def echo(message: str) -> str:
-    """Echo back the input message."""
-    return f"Echo: {message}"
+# ============================================================================
+# Feedback Tools - User Satisfaction Collection
+# ============================================================================
 
 
 @mcp.tool()
-@observe_tool(name="calculate_tool")
-def calculate(operation: str, a: float, b: float) -> float:
+@observe_tool(name="submit_feedback_accept")
+def submit_feedback_accept(
+    trace_id: str,
+    comment: str = None,
+) -> dict:
     """
-    Perform a basic calculation.
+    Submit positive feedback (accept) for a response.
 
     Args:
-        operation: Operation type (add, subtract, multiply, divide).
-        a: First operand.
-        b: Second operand.
+        trace_id: Trace ID of the response being rated.
+        comment: Optional comment explaining acceptance.
 
     Returns:
-        Result of the operation.
+        Confirmation dictionary.
     """
-    if operation == "add":
-        return a + b
-    elif operation == "subtract":
-        return a - b
-    elif operation == "multiply":
-        return a * b
-    elif operation == "divide":
-        if b == 0:
-            raise ValueError("Cannot divide by zero")
-        return a / b
-    else:
-        raise ValueError(f"Unknown operation: {operation}")
+    record_acceptance(
+        trace_id=trace_id,
+        user_id=get_session_id(),
+        comment=comment,
+    )
 
-
-@mcp.tool()
-@observe_tool(name="greet_tool")
-def greet(name: str, language: str = "en") -> str:
-    """
-    Generate a greeting.
-
-    Args:
-        name: Name to greet.
-        language: Language code (en, es, fr).
-
-    Returns:
-        Greeting message.
-    """
-    greetings = {
-        "en": f"Hello, {name}!",
-        "es": f"¡Hola, {name}!",
-        "fr": f"Bonjour, {name}!",
+    return {
+        "status": "success",
+        "message": "Feedback recorded",
+        "feedback_type": "accept",
     }
-    return greetings.get(language, f"Hello, {name}!")
 
 
-# Register feedback tools
-mcp.add_tool(submit_feedback_accept)
-mcp.add_tool(submit_feedback_reject)
-mcp.add_tool(submit_feedback_rating)
-mcp.add_tool(submit_feedback_comment)
+@mcp.tool()
+@observe_tool(name="submit_feedback_reject")
+def submit_feedback_reject(
+    trace_id: str,
+    reason: str = None,
+    comment: str = None,
+) -> dict:
+    """
+    Submit negative feedback (reject) for a response.
+
+    Args:
+        trace_id: Trace ID of the response being rated.
+        reason: Optional reason for rejection.
+        comment: Optional detailed comment.
+
+    Returns:
+        Confirmation dictionary.
+    """
+    record_rejection(
+        trace_id=trace_id,
+        user_id=get_session_id(),
+        reason=reason,
+        comment=comment,
+    )
+
+    return {
+        "status": "success",
+        "message": "Feedback recorded",
+        "feedback_type": "reject",
+    }
+
+
+@mcp.tool()
+@observe_tool(name="submit_feedback_rating")
+def submit_feedback_rating(
+    trace_id: str,
+    rating: int,
+    comment: str = None,
+) -> dict:
+    """
+    Submit a rating (1-5) for a response.
+
+    Args:
+        trace_id: Trace ID of the response being rated.
+        rating: Rating value (1-5).
+        comment: Optional comment.
+
+    Returns:
+        Confirmation dictionary.
+    """
+    if rating < 1 or rating > 5:
+        return {
+            "status": "error",
+            "message": "Rating must be between 1 and 5",
+        }
+
+    record_rating(
+        trace_id=trace_id,
+        rating=rating,
+        user_id=get_session_id(),
+        comment=comment,
+    )
+
+    return {
+        "status": "success",
+        "message": f"Rating {rating}/5 recorded",
+        "feedback_type": "rating",
+    }
+
+
+@mcp.tool()
+@observe_tool(name="submit_feedback_comment")
+def submit_feedback_comment(
+    trace_id: str,
+    comment: str,
+) -> dict:
+    """
+    Submit a text comment for a response.
+
+    Args:
+        trace_id: Trace ID of the response being commented on.
+        comment: Comment text.
+
+    Returns:
+        Confirmation dictionary.
+    """
+    record_comment(
+        trace_id=trace_id,
+        comment=comment,
+        user_id=get_session_id(),
+    )
+
+    return {
+        "status": "success",
+        "message": "Comment recorded",
+        "feedback_type": "comment",
+    }
 
 
 def main():

@@ -1,161 +1,161 @@
-# MCP Server Langfuse Observability Platform
+# MCP Server Langfuse 可观测性平台
 
-> **Project Type**: Production LLM Observability Platform  
-> **Target**: External SaaS Customers (1K-10K calls/day)  
-> **Tech Stack**: Python + FastMCP Framework + Langfuse Cloud  
-> **Created**: 2026-04-08
-
----
-
-## 📋 Table of Contents
-
-1. [Project Overview](#project-overview)
-2. [Requirements Analysis](#requirements-analysis)
-3. [Architecture Design](#architecture-design)
-4. [Implementation Guide](#implementation-guide)
-5. [Development Standards](#development-standards)
-6. [Best Practices](#best-practices)
-7. [References](#references)
+> **项目类型**: 生产级 LLM 可观测性平台  
+> **目标用户**: 外部 SaaS 客户（1K-10K 调用/天）  
+> **技术栈**: Python + FastMCP 框架 + Langfuse Cloud  
+> **创建日期**: 2026-04-08
 
 ---
 
-## 🎯 Project Overview
+## 📋 目录
 
-### Problem Statement
+1. [项目概述](#项目概述)
+2. [需求分析](#需求分析)
+3. [架构设计](#架构设计)
+4. [实施指南](#实施指南)
+5. [开发规范](#开发规范)
+6. [最佳实践](#最佳实践)
+7. [参考资料](#参考资料)
 
-Design and implement a comprehensive Langfuse-based observability platform for MCP Server applications that provides:
+---
 
-- **Call Success Rate Monitoring**: Track MCP tool invocation success/failure rates in real-time
-- **Prompt Path Tracking**: Monitor different prompt versions and their invocation paths
-- **Performance Observability**: Latency tracking, response time analysis
-- **User Satisfaction**: Acceptance/rejection signal collection and analysis
-- **Prompt Effectiveness**: A/B testing, variant comparison, prompt optimization insights
+## 🎯 项目概述
 
-### Business Objectives
+### 问题陈述
 
-1. **Proactive Failure Detection**: Automated alerting on anomalies and failures
-2. **Prompt Optimization**: Data-driven prompt engineering and variant testing
-3. **Service Quality Monitoring**: SLA tracking and performance benchmarking
-4. **User Behavior Analytics**: Understand how users interact with MCP tools
-5. **Cost/Performance Optimization**: Identify expensive or slow operations
+为 MCP Server 应用设计并实现一个基于 Langfuse 的综合可观测性平台，提供：
 
-### Target Metrics
+- **调用成功率监控**: 实时跟踪 MCP 工具调用的成功/失败率
+- **Prompt 路径跟踪**: 监控不同 prompt 版本及其调用路径
+- **性能可观测性**: 延迟跟踪、响应时间分析
+- **用户满意度**: 接受/拒绝信号收集与分析
+- **Prompt 有效性**: A/B 测试、变体比较、prompt 优化洞察
 
-| Metric Category | Specific Metrics | Target |
+### 业务目标
+
+1. **主动故障检测**: 对异常和故障进行自动告警
+2. **Prompt 优化**: 数据驱动的 prompt 工程和变体测试
+3. **服务质量监控**: SLA 跟踪和性能基准测试
+4. **用户行为分析**: 了解用户如何与 MCP 工具交互
+5. **成本/性能优化**: 识别昂贵或缓慢的操作
+
+### 目标指标
+
+| 指标类别 | 具体指标 | 目标 |
 |----------------|------------------|--------|
-| Availability | Tool call success rate | >99.5% |
-| Performance | P95 latency | <500ms |
-| Quality | User acceptance rate | >85% |
-| Observability | Trace completeness | 100% |
-| Cost | Token usage per call | Optimize by prompt version |
+| 可用性 | 工具调用成功率 | >99.5% |
+| 性能 | P95 延迟 | <500ms |
+| 质量 | 用户接受率 | >85% |
+| 可观测性 | Trace 完整性 | 100% |
+| 成本 | 每次调用的 token 使用量 | 按 prompt 版本优化 |
 
 ---
 
-## 🔍 Requirements Analysis
+## 🔍 需求分析
 
-### Functional Requirements
+### 功能需求
 
-#### 1. MCP Tool Call Logging
+#### 1. MCP 工具调用日志
 
-**Requirement**: Capture every MCP tool invocation with full context
+**需求**: 捕获每次 MCP 工具调用的完整上下文
 
-**Details**:
-- Log tool name, input parameters, output, execution time
-- Track tool call hierarchy (parent/child relationships)
-- Capture errors and exceptions with stack traces
-- Support both sync and async tool invocations
+**详情**:
+- 记录工具名称、输入参数、输出、执行时间
+- 跟踪工具调用层次结构（父子关系）
+- 捕获错误和异常及堆栈跟踪
+- 支持同步和异步工具调用
 
-**Integration Points**:
-- FastMCP tool handler decorators
-- MCP request/response middleware
-- Error handling hooks
+**集成点**:
+- FastMCP 工具处理器装饰器
+- MCP 请求/响应中间件
+- 错误处理钩子
 
-> 📖 **详细实现**: See [docs/integration-patterns.md](docs/integration-patterns.md) for complete instrumentation patterns.
+> 📖 **详细实现**: 参见 [docs/integration-patterns.md](docs/integration-patterns.md) 获取完整的插桩模式。
 
-#### 2. MCP Request/Response Tracking
+#### 2. MCP 请求/响应跟踪
 
-**Requirement**: Monitor MCP protocol interactions end-to-end
+**需求**: 端到端监控 MCP 协议交互
 
-**Details**:
-- Track MCP protocol messages (initialize, tools/list, tools/call, etc.)
-- Capture request metadata (session ID, user ID, client info)
-- Log response payloads with size tracking
-- Monitor request/response timing
+**详情**:
+- 跟踪 MCP 协议消息（initialize、tools/list、tools/call 等）
+- 捕获请求元数据（会话 ID、用户 ID、客户端信息）
+- 记录响应负载并跟踪大小
+- 监控请求/响应时序
 
-**Integration Points**:
-- MCP server middleware layer
-- Protocol message handlers
-- Session management layer
+**集成点**:
+- MCP 服务器中间件层
+- 协议消息处理器
+- 会话管理层
 
-> 📖 **详细实现**: See [docs/integration-patterns.md](docs/integration-patterns.md#request-response-tracking).
+> 📖 **详细实现**: 参见 [docs/integration-patterns.md](docs/integration-patterns.md#request-response-tracking)。
 
-#### 3. Session Tracing
+#### 3. 会话跟踪
 
-**Requirement**: Link multiple tool calls into end-to-end user sessions
+**需求**: 将多次工具调用链接为端到端的用户会话
 
-**Details**:
-- Generate or propagate session IDs across calls
-- Track user journey through multiple tool invocations
-- Support session grouping for multi-tenant scenarios
-- Enable session replay and analysis
+**详情**:
+- 在调用之间生成或传播会话 ID
+- 通过多次工具调用跟踪用户旅程
+- 支持多租户场景的会话分组
+- 启用会话回放和分析
 
-**Integration Points**:
-- Session context propagation
-- User authentication/authorization layer
-- Client session management
+**集成点**:
+- 会话上下文传播
+- 用户认证/授权层
+- 客户端会话管理
 
-> 📖 **详细实现**: See [docs/integration-patterns.md](docs/integration-patterns.md#session-tracing).
+> 📖 **详细实现**: 参见 [docs/integration-patterns.md](docs/integration-patterns.md#session-tracing)。
 
-#### 4. Prompt Versioning & Comparison
+#### 4. Prompt 版本管理与比较
 
-**Requirement**: Track and compare different prompt versions
+**需求**: 跟踪和比较不同的 prompt 版本
 
-**Details**:
-- Attach prompt version metadata to traces
-- Support A/B testing workflows
-- Compare success rates across versions
-- Track prompt evolution over time
+**详情**:
+- 将 prompt 版本元数据附加到 trace
+- 支持 A/B 测试工作流
+- 比较不同版本的成功率
+- 跟踪 prompt 随时间的演变
 
-**Integration Points**:
-- Prompt template management
-- Prompt selection logic
-- Version metadata injection
+**集成点**:
+- Prompt 模板管理
+- Prompt 选择逻辑
+- 版本元数据注入
 
-> 📖 **详细实现**: See [docs/integration-patterns.md](docs/integration-patterns.md#prompt-versioning).
+> 📖 **详细实现**: 参见 [docs/integration-patterns.md](docs/integration-patterns.md#prompt-versioning)。
 
-#### 5. Feedback Collection
+#### 5. 反馈收集
 
-**Requirement**: Capture user satisfaction signals
+**需求**: 捕获用户满意度信号
 
-**Details**:
-- Accept/reject signals from user interactions
-- Optional feedback comments or ratings
-- Feedback propagation to traces
-- Feedback aggregation and analysis
+**详情**:
+- 来自用户交互的接受/拒绝信号
+- 可选的反馈评论或评分
+- 反馈传播到 trace
+- 反馈聚合与分析
 
-**Integration Points**:
-- Response delivery layer
-- User feedback UI/API
-- Feedback processing pipeline
+**集成点**:
+- 响应交付层
+- 用户反馈 UI/API
+- 反馈处理管道
 
-> 📖 **详细实现**: See [docs/integration-patterns.md](docs/integration-patterns.md#feedback-collection).
+> 📖 **详细实现**: 参见 [docs/integration-patterns.md](docs/integration-patterns.md#feedback-collection)。
 
-#### 6. Alerting & Notification
+#### 6. 告警与通知
 
-**Requirement**: Proactive anomaly detection and alerting
+**需求**: 主动异常检测和告警
 
-**Details**:
-- Define alert rules (success rate thresholds, latency spikes)
-- Support multi-channel notifications (email, Slack, PagerDuty)
-- Alert fatigue prevention (grouping, deduplication)
-- Escalation policies
+**详情**:
+- 定义告警规则（成功率阈值、延迟峰值）
+- 支持多渠道通知（邮件、Slack、PagerDuty）
+- 防止告警疲劳（分组、去重）
+- 升级策略
 
-**Integration Points**:
-- Langfuse alerting configuration
-- External notification services
-- Incident management integration
+**集成点**:
+- Langfuse 告警配置
+- 外部通知服务
+- 事件管理集成
 
-> 📖 **详细实现**: See [docs/integration-patterns.md](docs/integration-patterns.md#alerting).
+> 📖 **详细实现**: 参见 [docs/integration-patterns.md](docs/integration-patterns.md#alerting)。
 
 ### Non-Functional Requirements
 

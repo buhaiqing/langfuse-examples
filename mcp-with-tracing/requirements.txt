@@ -2,8 +2,8 @@
 # Python Dependencies
 
 # Core Framework
-fastmcp>=0.1.0
-mcp>=1.0.0
+fastmcp==2.12.0
+mcp==1.26.0
 
 # Observability
 langfuse>=2.0.0
