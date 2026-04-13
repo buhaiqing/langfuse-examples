@@ -1,10 +1,15 @@
 """工具调用 API 路由"""
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 
 from utils.api_client import api_client, JiraClient, ZendeskClient
+from core.exceptions import (
+    ToolExecutionFailed,
+    ValidationException,
+    ErrorCode,
+)
 
 
 router = APIRouter(prefix="/tools", tags=["工具调用"])
@@ -38,20 +43,29 @@ async def execute_tool(request: ToolExecuteRequest):
     - reset_password: 重置密码
     - get_product_info: 获取产品信息
     - check_service_status: 检查服务状态
+
+    Raises:
+        ValidationException: 参数验证失败
+        ToolExecutionFailed: 工具执行失败
     """
+    # 支持的工具列表
+    supported_tools = {
+        "query_ticket_status": _query_ticket_status,
+        "check_account_status": _check_account_status,
+        "get_product_info": _get_product_info,
+    }
+
+    # 检查工具是否存在
+    if request.tool_name not in supported_tools:
+        raise ValidationException(
+            message=f"未知的工具：{request.tool_name}",
+            details={"supported_tools": list(supported_tools.keys())},
+        )
+
     try:
-        if request.tool_name == "query_ticket_status":
-            result = await _query_ticket_status(request.parameters)
-        elif request.tool_name == "check_account_status":
-            result = await _check_account_status(request.parameters)
-        elif request.tool_name == "get_product_info":
-            result = await _get_product_info(request.parameters)
-        else:
-            return ToolExecuteResponse(
-                success=False,
-                data=None,
-                message=f"未知的工具：{request.tool_name}",
-            )
+        # 执行工具
+        tool_func = supported_tools[request.tool_name]
+        result = await tool_func(request.parameters)
 
         return ToolExecuteResponse(
             success=True,
@@ -60,10 +74,10 @@ async def execute_tool(request: ToolExecuteRequest):
         )
 
     except Exception as e:
-        return ToolExecuteResponse(
-            success=False,
-            data=None,
-            message=f"工具执行失败：{str(e)}",
+        # 转换为业务异常
+        raise ToolExecutionFailed(
+            tool_name=request.tool_name,
+            message=str(e),
         )
 
 

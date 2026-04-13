@@ -150,3 +150,53 @@ class RateLimitException(BusinessException):
             status_code=429,
             details={"retry_after": retry_after},
         )
+
+
+# ==================== 业务特定异常 ====================
+
+class IntentRecognitionFailed(BusinessException):
+    """意图识别失败"""
+
+    def __init__(self, message: str = "意图识别失败"):
+        super().__init__(
+            code=ErrorCode.INTENT_RECOGNITION_FAILED,
+            message=message,
+            status_code=500,
+        )
+
+
+class RAGQueryFailed(BusinessException):
+    """RAG 查询失败"""
+
+    def __init__(self, message: str = "知识库查询失败", code: ErrorCode = ErrorCode.RAG_QUERY_FAILED):
+        super().__init__(
+            code=code,
+            message=message,
+            status_code=500,
+        )
+
+
+class ToolExecutionFailed(BusinessException):
+    """工具执行失败"""
+
+    def __init__(self, tool_name: str, message: str = "工具执行失败"):
+        super().__init__(
+            code=ErrorCode.TOOL_EXECUTION_FAILED,
+            message=f"[{tool_name}] {message}",
+            status_code=500,
+            details={"tool_name": tool_name},
+        )
+
+
+class ConversationNotFoundException(ResourceNotFoundException):
+    """会话不存在"""
+
+    def __init__(self, session_id: str):
+        super().__init__(resource="会话", resource_id=session_id)
+
+
+class DocumentNotFoundException(ResourceNotFoundException):
+    """文档不存在"""
+
+    def __init__(self, doc_id: str):
+        super().__init__(resource="文档", resource_id=doc_id)
