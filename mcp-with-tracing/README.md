@@ -149,6 +149,7 @@ scripts/test_success_failure_tracking.py: 3/3 passed
 
 ## 相关文档
 
+- [需求与任务对齐](docs/FEATURE_LIST.md) - 需求主文档 ⭐ 
 - [AGENTS.md](AGENTS.md) - 项目总体规范
 - [docs/integration-patterns.md](docs/integration-patterns.md) - 集成模式
 - [docs/backend-standards.md](docs/backend-standards.md) - 后端标准
