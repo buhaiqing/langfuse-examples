@@ -11,7 +11,6 @@ import asyncio
 
 import chromadb
 from chromadb.config import Settings
-from chromadb.api.types import IncludeEnum
 import numpy as np
 from rank_bm25 import BM25Okapi
 
@@ -23,6 +22,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class DocumentChunk:
     """文档块数据类"""
+
     id: str
     content: str
     embedding: Optional[List[float]] = None
@@ -33,6 +33,7 @@ class DocumentChunk:
 @dataclass
 class HybridSearchResult:
     """混合搜索结果"""
+
     chunks: List[DocumentChunk]
     vector_results: List[DocumentChunk]
     keyword_results: List[DocumentChunk]
@@ -66,7 +67,7 @@ class ChromaDBClient:
                     settings=Settings(
                         anonymized_telemetry=False,
                         allow_reset=True,
-                    )
+                    ),
                 )
 
             # 获取或创建集合
@@ -133,7 +134,7 @@ class ChromaDBClient:
 
         # 分批处理
         for i in range(0, len(documents), batch_size):
-            batch = documents[i:i + batch_size]
+            batch = documents[i : i + batch_size]
 
             try:
                 ids = [doc.id for doc in batch]
@@ -237,7 +238,7 @@ class ChromaDBClient:
         try:
             result = self.collection.get(
                 ids=[doc_id],
-                include=[IncludeEnum.documents, IncludeEnum.metadatas],
+                include=["documents", "metadatas"],
             )
 
             if not result["ids"]:
@@ -279,7 +280,7 @@ class ChromaDBClient:
                 query_embeddings=[query_embedding],
                 n_results=k,
                 where=filter_metadata,
-                include=[IncludeEnum.documents, IncludeEnum.metadatas, IncludeEnum.distances],
+                include=["documents", "metadatas", "distances"],
             )
 
             chunks = []
@@ -533,7 +534,7 @@ class ChromaDBClient:
         try:
             # 获取所有文档
             result = self.collection.get(
-                include=[IncludeEnum.documents],
+                include=["documents"],
             )
 
             if not result["ids"]:
@@ -584,6 +585,9 @@ class ChromaDBClient:
 
 # 全局 ChromaDB 客户端实例
 chroma_client = ChromaDBClient()
+
+# 为测试兼容性提供别名
+ChromaClient = ChromaDBClient
 
 
 async def get_chroma_client() -> ChromaDBClient:

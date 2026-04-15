@@ -16,18 +16,17 @@ from core.langfuse_client import (
     score_trace,
     Scores,
     langfuse_client,
+    create_span,
 )
 
 from core.security import (
     create_access_token,
-    verify_token,
     get_current_user,
-    APIKeyAuth,
 )
 
 from core.exceptions import (
     ErrorCode,
-    BaseException,
+    BusinessException,
     ValidationException,
     AuthenticationException,
     RateLimitException,
@@ -57,6 +56,7 @@ __all__ = [
     "score_trace",
     "Scores",
     "langfuse_client",
+    "create_span",
     # 安全
     "create_access_token",
     "verify_token",
@@ -64,7 +64,7 @@ __all__ = [
     "APIKeyAuth",
     # 异常
     "ErrorCode",
-    "BaseException",
+    "BusinessException",
     "ValidationException",
     "AuthenticationException",
     "RateLimitException",

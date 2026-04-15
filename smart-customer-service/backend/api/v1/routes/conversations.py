@@ -1,6 +1,7 @@
 """会话管理 API 路由"""
 
 from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Query
 from pydantic import BaseModel, Field
 from typing import Optional, Dict, Any, List
 from datetime import datetime
@@ -119,8 +120,8 @@ async def delete_conversation(session_id: str):
 
 @router.get("", response_model=ConversationResponse)
 async def list_conversations(
-    limit: int = Field(default=20, ge=1, le=100),
-    offset: int = Field(default=0, ge=0),
+    limit: int = Query(default=20, ge=1, le=100),
+    offset: int = Query(default=0, ge=0),
 ):
     """获取会话列表"""
     # TODO: 实现分页查询

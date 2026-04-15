@@ -2,8 +2,6 @@
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from slowapi import _rate_limit_exceeded_handler
-from slowapi.middleware import RateLimitMiddleware
 
 from core.config import settings
 from api.v1.routes import intent, rag, tools, conversations

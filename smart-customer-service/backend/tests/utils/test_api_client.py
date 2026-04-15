@@ -3,7 +3,7 @@
 import pytest
 from unittest.mock import AsyncMock, patch, MagicMock
 import httpx
-from backend.utils.api_client import (
+from utils.api_client import (
     APIClient,
     JiraClient,
     ZendeskClient,
@@ -156,12 +156,12 @@ class TestAPIClient:
     @pytest.mark.asyncio
     async def test_close_client(self, api_client):
         """测试关闭客户端"""
-        api_client._client = MagicMock()
-        api_client._client.aclose = AsyncMock()
+        mock_client = AsyncMock()
+        api_client._client = mock_client
 
         await api_client.close()
 
-        api_client._client.aclose.assert_called_once()
+        mock_client.aclose.assert_called_once()
         assert api_client._client is None
 
 

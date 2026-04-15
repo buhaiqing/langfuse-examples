@@ -5,7 +5,7 @@ from pathlib import Path
 import hashlib
 from dataclasses import dataclass, field
 
-from langchain.text_splitter import RecursiveCharacterTextSplitter, MarkdownTextSplitter
+from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownTextSplitter
 from langchain_community.document_loaders import (
     PyPDFLoader,
     Docx2txtLoader,

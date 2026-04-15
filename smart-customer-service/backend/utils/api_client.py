@@ -41,7 +41,7 @@ class APIClient:
         self.timeout = timeout
 
         self.breaker = pybreaker.CircuitBreaker(
-            failure_threshold=5, recovery_timeout=30, expected_exception=httpx.HTTPError
+            fail_max=5, reset_timeout=30, exclude=[httpx.HTTPStatusError]
         )
 
         self._client: Optional[httpx.AsyncClient] = None
@@ -54,12 +54,32 @@ class APIClient:
             )
         return self._client
 
+    @client.setter
+    def client(self, value: httpx.AsyncClient):
+        self._client = value
+
+    @client.deleter
+    def client(self):
+        if self._client:
+            import asyncio
+
+            try:
+                loop = asyncio.get_event_loop()
+                if loop.is_running():
+                    aclose = self._client.aclose()
+                    if hasattr(aclose, "__await__"):
+                        asyncio.create_task(aclose)
+                elif hasattr(loop, "run_until_complete"):
+                    loop.run_until_complete(self._client.aclose())
+            except (RuntimeError, TypeError):
+                pass  # No event loop or not async, skip cleanup
+        self._client = None
+
     @retry(
         stop=stop_after_attempt(3),
         wait=wait_exponential(multiplier=1, min=2, max=10),
         retry=retry_if_exception_type(httpx.HTTPError),
     )
-    @breaker
     async def request(
         self,
         method: str,
@@ -70,27 +90,30 @@ class APIClient:
         data: Optional[Dict[str, Any]] = None,
         **kwargs,
     ) -> Dict[str, Any]:
+        async def _call():
+            try:
+                response = await self.client.request(
+                    method=method,
+                    url=url,
+                    headers=headers,
+                    params=params,
+                    json=json,
+                    data=data,
+                    **kwargs,
+                )
+
+                response.raise_for_status()
+
+                return response.json() if response.content else {}
+            except httpx.HTTPStatusError as e:
+                raise APIClientError(
+                    f"HTTP error: {e.response.status_code}", status_code=e.response.status_code
+                )
+            except httpx.RequestError as e:
+                raise APIClientError(f"Request error: {str(e)}")
+
         try:
-            response = await self.client.request(
-                method=method,
-                url=url,
-                headers=headers,
-                params=params,
-                json=json,
-                data=data,
-                **kwargs,
-            )
-
-            response.raise_for_status()
-
-            return response.json() if response.content else {}
-
-        except httpx.HTTPStatusError as e:
-            raise APIClientError(
-                f"HTTP error: {e.response.status_code}", status_code=e.response.status_code
-            )
-        except httpx.RequestError as e:
-            raise APIClientError(f"Request error: {str(e)}")
+            return await self.breaker.call(_call)
         except pybreaker.CircuitBreakerError:
             raise CircuitBreakerOpen()
 

@@ -23,7 +23,8 @@ from dataclasses import dataclass, field
 from collections import defaultdict
 import logging
 
-from fastapi import WebSocket, WebSocketDisconnect, WebSocketState
+from fastapi import WebSocket, WebSocketDisconnect
+from starlette.websockets import WebSocketState
 from storage.redis_client import redis_client
 from core.config import settings
 
@@ -78,27 +79,27 @@ class WebSocketManager:
         )
         # 最大无响应次数
         self.max_missed_heartbeats = 3
-        
+
         # 线程安全锁
         self._connections_lock = asyncio.Lock()
         self._agents_lock = asyncio.Lock()
         self._users_lock = asyncio.Lock()
-        
+
         # 性能指标
         self.metrics = ConnectionMetrics()
-        
+
         # 广播信号量（限制并发）
         self._broadcast_semaphore = asyncio.Semaphore(self.MAX_BROADCAST_CONCURRENCY)
 
     async def connect(self, websocket: WebSocket, client_id: str, is_agent: bool = False) -> bool:
         """
         接受 WebSocket 连接 - 线程安全版本
-        
+
         Args:
             websocket: WebSocket 对象
             client_id: 客户端 ID
             is_agent: 是否为客服客户端
-            
+
         Returns:
             是否连接成功
         """
@@ -123,7 +124,7 @@ class WebSocketManager:
             # 使用锁保护共享状态
             async with self._connections_lock:
                 self.active_connections[client_id] = connection
-                
+
             if is_agent:
                 async with self._agents_lock:
                     self.agent_connections.add(client_id)
@@ -140,7 +141,9 @@ class WebSocketManager:
             # 存储到 Redis（支持多实例同步）- 非阻塞
             asyncio.create_task(self._save_to_redis(client_id, is_agent))
 
-            logger.info(f"WebSocket 连接：{client_id} (客服：{is_agent}, 当前连接数：{current_count})")
+            logger.info(
+                f"WebSocket 连接：{client_id} (客服：{is_agent}, 当前连接数：{current_count})"
+            )
 
             # 发送欢迎消息
             await self.send_personal_message(
@@ -179,9 +182,9 @@ class WebSocketManager:
         async with self._connections_lock:
             if client_id not in self.active_connections:
                 return
-                
+
             connection = self.active_connections[client_id]
-            
+
             # 从集合中移除
             if connection.is_agent:
                 async with self._agents_lock:
@@ -209,17 +212,19 @@ class WebSocketManager:
         try:
             message_json = json.dumps(message, ensure_ascii=False)
             await websocket.send_text(message_json)
-            
+
             # 更新指标
             self.metrics.total_messages += 1
-            self.metrics.total_bytes += len(message_json.encode('utf-8'))
-            
+            self.metrics.total_bytes += len(message_json.encode("utf-8"))
+
             return True
         except Exception as e:
             logger.error(f"发送消息失败：{e}")
             return False
 
-    async def _send_to_connection_safe(self, connection: WebSocketConnection, message: dict) -> bool:
+    async def _send_to_connection_safe(
+        self, connection: WebSocketConnection, message: dict
+    ) -> bool:
         """安全地发送消息到单个连接"""
         try:
             async with self._broadcast_semaphore:
@@ -231,22 +236,24 @@ class WebSocketManager:
             logger.warning(f"发送消息到 {connection.client_id} 失败：{e}")
             return False
 
-    async def broadcast_to_agents(self, message: dict, exclude: Optional[Set[str]] = None) -> Dict[str, Any]:
+    async def broadcast_to_agents(
+        self, message: dict, exclude: Optional[Set[str]] = None
+    ) -> Dict[str, Any]:
         """
         广播消息到所有客服 - fire-and-forget 优化版本
-        
+
         采用不等待全部完成的策略，超时后自动放弃，避免单点阻塞
-        
+
         Args:
             message: 消息内容
             exclude: 排除的客服 ID 集合
-            
+
         Returns:
             广播统计信息
         """
         exclude = exclude or set()
         start_time = time.time()
-        
+
         # 获取当前在线客服列表（快照）
         async with self._agents_lock:
             current_agents = self.agent_connections.copy()
@@ -254,7 +261,7 @@ class WebSocketManager:
         # 创建发送任务
         tasks = []
         target_agents = []
-        
+
         async with self._connections_lock:
             for client_id in current_agents:
                 if client_id in exclude:
@@ -263,7 +270,7 @@ class WebSocketManager:
                     connection = self.active_connections[client_id]
                     task = asyncio.create_task(
                         self._send_to_connection_safe(connection, message),
-                        name=f"broadcast_{client_id}"
+                        name=f"broadcast_{client_id}",
                     )
                     tasks.append(task)
                     target_agents.append(client_id)
@@ -277,24 +284,25 @@ class WebSocketManager:
             try:
                 # 最多等待 2 秒
                 results = await asyncio.wait_for(
-                    asyncio.gather(*tasks, return_exceptions=True),
-                    timeout=2.0
+                    asyncio.gather(*tasks, return_exceptions=True), timeout=2.0
                 )
             except asyncio.TimeoutError:
                 logger.warning(f"广播超时，取消剩余 {len(tasks) - len(results)} 个任务")
                 # 取消未完成的任务
-                for task in tasks[len(results):]:
+                for task in tasks[len(results) :]:
                     task.cancel()
 
         # 统计结果
         success_count = sum(1 for r in results if r is True)
         failed_count = len(results) - success_count
         error_count = sum(1 for r in results if isinstance(r, Exception))
-        
+
         duration = time.time() - start_time
-        
+
         if failed_count > 0 or error_count > 0:
-            logger.warning(f"广播完成：成功 {success_count}/{len(tasks)}, 失败 {failed_count}, 错误 {error_count}, 耗时 {duration:.3f}s")
+            logger.warning(
+                f"广播完成：成功 {success_count}/{len(tasks)}, 失败 {failed_count}, 错误 {error_count}, 耗时 {duration:.3f}s"
+            )
             self.metrics.broadcast_errors += error_count
 
         return {
@@ -369,7 +377,7 @@ class WebSocketManager:
         await self.disconnect(client_id)
         return True
 
-    def get_stats(self) -> dict:
+    async def get_stats(self) -> dict:
         """获取连接统计信息（包含性能指标）"""
         async with self._connections_lock:
             total = len(self.active_connections)
@@ -387,9 +395,12 @@ class WebSocketManager:
             "total_bytes": self.metrics.total_bytes,
             "connection_errors": self.metrics.connection_errors,
             "broadcast_errors": self.metrics.broadcast_errors,
-            "uptime_seconds": (datetime.utcnow() - datetime.fromtimestamp(
-                getattr(self, '_start_time', datetime.utcnow().timestamp())
-            )).total_seconds(),
+            "uptime_seconds": (
+                datetime.utcnow()
+                - datetime.fromtimestamp(
+                    getattr(self, "_start_time", datetime.utcnow().timestamp())
+                )
+            ).total_seconds(),
         }
 
     def reset_metrics(self):
@@ -453,7 +464,7 @@ async def websocket_handler(websocket: WebSocket, client_id: str, is_agent: bool
                     # 新消息通知 - 异步广播
                     payload = message.get("payload", {})
                     session_id = payload.get("session_id")
-                    
+
                     asyncio.create_task(
                         websocket_manager.broadcast_to_agents(
                             {
@@ -483,7 +494,7 @@ async def broadcast_escalation(escalation_data: dict) -> Dict[str, Any]:
 
     Args:
         escalation_data: 升级数据
-        
+
     Returns:
         广播统计
     """
@@ -502,7 +513,7 @@ async def notify_session_update(session_id: str, update_data: dict) -> Dict[str,
     Args:
         session_id: 会话 ID
         update_data: 更新数据
-        
+
     Returns:
         广播统计
     """
