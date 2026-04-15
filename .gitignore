@@ -144,3 +144,5 @@ cython_debug/
 
 smart-customer-service/frontend/node_modules/
 .DS_Store
+
+.superset/

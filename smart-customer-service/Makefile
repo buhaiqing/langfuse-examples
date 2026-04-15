@@ -1,4 +1,4 @@
-.PHONY: help install install-dev update clean run-test run-basic run-demo run-verify lint format type-check check-all setup dotenv build docker-up docker-down docker-logs docker-restart redis-cli postgres-cli db-migrate db-init minio-init
+.PHONY: help install install-dev update clean run-test run-basic run-demo run-verify lint format type-check check-all setup dotenv build docker-up docker-down docker-logs docker-restart redis-cli postgres-cli db-migrate db-init minio-init test-e2e test-e2e-user test-e2e-agent test-e2e-api test-e2e-integration
 
 # Default target
 help:
@@ -21,6 +21,11 @@ help:
 	@echo "  make test           - Run all tests with pytest"
 	@echo "  make test-cov       - Run tests with coverage report"
 	@echo "  make test-watch     - Run tests in watch mode"
+	@echo "  make test-e2e       - Run E2E tests (requires backend running)"
+	@echo "  make test-e2e-user  - Run E2E user flow tests"
+	@echo "  make test-e2e-agent - Run E2E agent flow tests"
+	@echo "  make test-e2e-api   - Run E2E API tests"
+	@echo "  make test-e2e-integration - Run E2E integration tests"
 	@echo ""
 	@echo "Running Examples:"
 	@echo "  make verify         - Verify project setup"
@@ -95,6 +100,28 @@ test-cov:
 test-watch:
 	@echo "Running tests in watch mode (Ctrl+C to exit)..."
 	uv run ptw backend/tests/
+
+# E2E Testing (requires backend running)
+test-e2e:
+	@echo "Running E2E tests..."
+	@echo "⚠️  Requires backend running at http://localhost:8000"
+	uv run python tests/e2e/run_tests.py --type all
+
+test-e2e-user:
+	@echo "Running E2E user flow tests..."
+	uv run python tests/e2e/run_tests.py --type user
+
+test-e2e-agent:
+	@echo "Running E2E agent flow tests..."
+	uv run python tests/e2e/run_tests.py --type agent
+
+test-e2e-api:
+	@echo "Running E2E API tests..."
+	uv run python tests/e2e/run_tests.py --type api
+
+test-e2e-integration:
+	@echo "Running E2E integration tests..."
+	uv run python tests/e2e/run_tests.py --type integration
 
 # Running Examples
 verify:

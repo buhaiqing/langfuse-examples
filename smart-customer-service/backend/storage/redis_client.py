@@ -482,6 +482,52 @@ class RedisClient:
             "updated_at": data.get("updated_at", ""),
         }
 
+    @with_retry(max_retries=3)
+    async def get_multiple_agent_status(self, agent_ids: List[str]) -> Dict[str, dict]:
+        """
+        批量获取多个客服状态
+
+        使用 Pipeline 优化，避免 N+1 问题
+
+        Args:
+            agent_ids: 客服 ID 列表
+
+        Returns:
+            客服状态字典 {agent_id: status_dict}
+        """
+        if not agent_ids:
+            return {}
+
+        # 使用 Pipeline 批量查询
+        pipe = self._client.pipeline()
+        for agent_id in agent_ids:
+            pipe.hgetall(RedisKeys.AGENT_STATUS.format(agent_id=agent_id))
+
+        results = await pipe.execute()
+
+        # 解析结果
+        status_dict = {}
+        for i, agent_id in enumerate(agent_ids):
+            data = results[i]
+            if data:
+                status_dict[agent_id] = {
+                    "status": data.get("status", "offline"),
+                    "concurrent_chats": int(data.get("concurrent_chats", 0)),
+                    "updated_at": data.get("updated_at", ""),
+                }
+            else:
+                status_dict[agent_id] = {
+                    "status": "offline",
+                    "concurrent_chats": 0,
+                    "updated_at": "",
+                }
+
+        return status_dict
+
+    async def get_client(self) -> Optional[Redis]:
+        """获取底层 Redis 客户端"""
+        return self._client
+
     # ==================== 升级队列管理 ====================
     @with_retry(max_retries=3)
     async def add_to_escalation_queue(self, conversation_id: str, priority_score: float) -> None:
