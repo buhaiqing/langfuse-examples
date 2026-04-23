@@ -581,30 +581,163 @@ pre-commit run --all-files
 - **Discord**: [加入我们的 Discord](https://discord.gg/example)
 - **Twitter**: [@skill_observability](https://twitter.com/example)
 
-## 最近更新 (2026-04-23)
+## 最近更新 (2026-04-24)
 
-### ✅ 完整实现 (v0.1.0)
+### ✅ 文档与代码优化
 
-**主要里程碑**:
-- ✅ Phase 1-5 全部完成 (100%)
-- ✅ 29 个核心模块 (~4,600 行)
-- ✅ 131 个通过的测试
-- ✅ 文档：2,000+ 行
-- ✅ 代码质量：black, ruff, mypy 检查通过
+**文档更新**:
+- ✅ README.md 添加技术架构优势详解
+- ✅ 创建 USER_GUIDE.md 完整用户手册（800行）
+- ✅ 创建 LESSONS_LEARNED.md 开发反思总结
+- ✅ 添加代码走读路径指南
 
-**新特性**:
-- ✅ STOP 协议 L0-L3 实现
-- ✅ CI/CD 追踪 (GitHub Actions, GitLab CI)
-- ✅ 跨层追踪传播
-- ✅ 统一标签系统
-- ✅ 告警和反馈集成
-- ✅ 性能指标和分析
-- ✅ CLI 工具 (stop init, stop validate)
-- ✅ 仪表板集成
+**代码修复**:
+- ✅ 修复 AssertionResult 默认值（{} → None）
+- ✅ 修复 ManifestParser.load() 方法缺失
+- ✅ 修复 TracerContext ContextVar 初始化
+- ✅ 修复 TraceContextManager.end() 方法缺失
+- ✅ 修复 test fixtures 数据不匹配
+- ✅ 测试覆盖率从 48% 提升到 50%
+- ✅ 测试通过数从 255 提升到 275
 
-**基础设施**:
-- ✅ PyPI 包准备就绪
-- ✅ 完整文档
-- ✅ CI/CD 流水线
-- ✅ 测试框架
+---
+
+## 代码走读指南
+
+> **面向新开发者的代码导航 - 从哪里开始阅读？**
+
+### 核心文件地图（按优先级）
+
+```
+skill-observability-toolkit/src/
+
+├─ 🎯 入口层（必读 P0）
+│  ├─ __init__.py                          [9行]   包入口
+│  └─ core/__init__.py                     [151行] API总览 ⭐
+│
+├─ 📋 Skill 核心层（必读 P0）
+│  ├─ stop/manifest.py                     [580行] ★★★ Manifest解析
+│  ├─ stop/tracer.py                       [558行] ★★★ STOP追踪核心
+│  ├─ stop/assertions.py                   [668行] ★★★ 断言引擎
+│  └─ stop/trust_score.py                  [147行] ★★ Trust Score
+│
+├─ 🔗 Langfuse 集成层（必读 P1）
+│  ├─ langfuse_integration/client.py       [380行] ★★★ Langfuse客户端
+│  ├─ langfuse_integration/decorators.py   [264行] ★★★ 追踪装饰器
+│  └─ langfuse_integration/context.py      [145行] ★★ Trace上下文
+│
+├─ 🔄 CI/CD 层（必读 P2）
+│  ├─ ci/decorators.py                     [323行] ★★ CI装饰器
+│  ├─ ci/profiler.py                       [493行] ★★ 构建分析
+│  └─ ci/context.py                        [276行] ★ CI上下文
+│
+├─ 🔗 Correlation 层（必读 P3）
+│  ├─ correlation/propagation.py           [313行] ★★ Trace传播
+│  └─ correlation/labels.py                [448行] ★★ 标签系统
+│
+└─ 🖥️ CLI 层（必读 P4）
+   ├─ cli/init.py                          [239行] ★ init命令
+   └─ cli/validate.py                      [170行] ★ validate命令
+```
+
+### 三种阅读路径
+
+#### 🚀 入门路径（30分钟）
+
+**目标**: 快速理解项目结构
+
+```
+第1步: __init__.py [9行]
+      → 了解包基本信息
+
+第2步: core/__init__.py [151行] ⭐ 推荐首选
+      → 查看所有导出的公共API
+      → 重点函数：trace_skill_execution, ManifestParser
+
+第3步: stop/manifest.py [580行]
+      → 第210-280行：ManifestParser.parse()
+      → 第27-80行：SkillInput/SkillOutput/Assion dataclass
+```
+
+#### 💡 核心路径（1小时）
+
+**目标**: 深入理解追踪机制
+
+```
+第1步: stop/tracer.py [558行] ★★★ 最重要
+      → 第30-80行：TracerContext (ContextVar机制)
+      → 第107-180行：start_trace/start_span逻辑
+      → 第200-250行：Span dataclass
+
+第2步: stop/assertions.py [668行] ★★★ 
+      → 第63-100行：AssertionEngine核心类
+      → 第84-235行：16种内置_check方法
+      → 第27-45行：AssertionResult dataclass
+
+第3步: langfuse_integration/decorators.py [264行]
+      → 第22-122行：@trace_skill_execution实现
+      → 第125-200行：@trace_tool_call实现
+```
+
+#### 🎯 高级路径（2小时）
+
+**目标**: 理解跨层关联和CI集成
+
+```
+第1步: correlation/propagation.py [313行]
+      → Trace ID传播链：ci→skill→mcp
+
+第2步: langfuse_integration/context.py [145行]
+      → ContextVar底层实现
+
+第3步: ci/decorators.py [323行]
+      → CI环境检测（GitHub/GitLab）
+
+第4步: ci/profiler.py [493行]
+      → BuildProfiler性能分析
+```
+
+### 核心类速查表
+
+| 核心类 | 文件位置 | 关键方法 | 行数范围 |
+|---|---|---|---|
+| `ManifestParser` | stop/manifest.py | `parse()`, `validate()` | 210-280 |
+| `STOPTracer` | stop/tracer.py | `start_trace()`, `start_span()` | 30-180 |
+| `AssertionEngine` | stop/assertions.py | `execute()`, `_check_*()` | 63-235 |
+| `LangfuseClient` | langfuse_integration/client.py | `get_instance()`, `score_trace()` | 18-100 |
+| `TracePropagator` | correlation/propagation.py | `propagate_ci_to_skill()` | 50-150 |
+| `TracerContext` | stop/tracer.py | ContextVar操作 | 30-80 |
+
+### 测试代码对应关系
+
+| 源文件 | 测试文件 | 重点关注 |
+|---|---|---|
+| stop/manifest.py | tests/unit/test_manifest.py | parse验证 |
+| stop/tracer.py | tests/unit/test_tracer.py | Trace传播 |
+| stop/assertions.py | tests/unit/test_assertions.py | 断言执行 |
+| langfuse_integration/client.py | tests/unit/test_client.py | Langfuse集成 |
+| cli/validate.py | tests/unit/test_validate.py | CLI流程 |
+
+### IDE 调试配置
+
+**VS Code**:
+```json
+// launch.json
+{
+  "type": "python",
+  "request": "launch",
+  "name": "Debug Skill",
+  "program": "${workspaceFolder}/src/main.py",
+  "envFile": "${workspaceFolder}/.env"
+}
+```
+
+**PyCharm**:
+```
+Run → Edit Configurations →
+  Script path: src/main.py
+  Environment variables: .env
+```
+
+---
 
