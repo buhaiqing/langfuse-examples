@@ -3,7 +3,6 @@
 """Tests for CI/CD integration with correlation layer."""
 
 import os
-import pytest
 
 
 class TestCIIntegration:

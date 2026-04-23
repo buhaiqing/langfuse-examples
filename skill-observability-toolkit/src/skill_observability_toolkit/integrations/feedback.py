@@ -4,10 +4,9 @@ Feedback System Integration.
 This module provides integration with the feedback system from mcp-with-tracing.
 """
 
-import os
-from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 
 class FeedbackType(Enum):
@@ -25,11 +24,11 @@ class Feedback:
     id: str
     type: FeedbackType
     message: str
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
     timestamp: float = field(default_factory=lambda: 0)  # Will be set after
-    trace_id: Optional[str] = None
-    user_id: Optional[str] = None
-    
+    trace_id: str | None = None
+    user_id: str | None = None
+
     def __post_init__(self):
         """Set timestamp after init."""
         if self.timestamp == 0:
@@ -40,42 +39,42 @@ class Feedback:
 class FeedbackCollector:
     """
     Collect and manage feedback.
-    
+
     Provides functionality to:
     - Collect feedback from users
     - Store feedback
     - Analyze feedback
     - Export feedback
     """
-    
-    def __init__(self, storage_path: Optional[str] = None):
+
+    def __init__(self, storage_path: str | None = None):
         """
         Initialize the feedback collector.
-        
+
         Args:
             storage_path: Path to feedback storage
         """
-        self._feedback: List[Feedback] = []
+        self._feedback: list[Feedback] = []
         self._storage_path = storage_path
-    
+
     def collect(
         self,
         feedback_type: FeedbackType,
         message: str,
-        trace_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-        metadata: Optional[Dict[str, Any]] = None,
+        trace_id: str | None = None,
+        user_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> Feedback:
         """
         Collect feedback.
-        
+
         Args:
             feedback_type: Type of feedback
             message: Feedback message
             trace_id: Associated trace ID
             user_id: User ID
             metadata: Additional metadata
-            
+
         Returns:
             Created feedback instance
         """
@@ -87,66 +86,66 @@ class FeedbackCollector:
             user_id=user_id,
             metadata=metadata or {},
         )
-        
+
         self._feedback.append(feedback)
-        
+
         # Store feedback
         self._store_feedback(feedback)
-        
+
         return feedback
-    
+
     def _generate_feedback_id(self) -> str:
         """Generate unique feedback ID."""
         import uuid
         return f"feedback_{uuid.uuid4().hex[:8]}"
-    
+
     def _store_feedback(self, feedback: Feedback) -> bool:
         """
         Store feedback.
-        
+
         Args:
             feedback: Feedback to store
-            
+
         Returns:
             True if stored successfully
         """
         # TODO: Implement storage (file, database, etc.)
         return True
-    
+
     def get_feedback(
         self,
-        feedback_id: Optional[str] = None,
-        trace_id: Optional[str] = None,
-        feedback_type: Optional[FeedbackType] = None,
-    ) -> List[Feedback]:
+        feedback_id: str | None = None,
+        trace_id: str | None = None,
+        feedback_type: FeedbackType | None = None,
+    ) -> list[Feedback]:
         """
         Get feedback.
-        
+
         Args:
             feedback_id: Specific feedback ID
             trace_id: Filter by trace ID
             feedback_type: Filter by type
-            
+
         Returns:
             List of feedback instances
         """
         results = self._feedback
-        
+
         if feedback_id:
             results = [f for f in results if f.id == feedback_id]
-        
+
         if trace_id:
             results = [f for f in results if f.trace_id == trace_id]
-        
+
         if feedback_type:
             results = [f for f in results if f.type == feedback_type]
-        
+
         return results
-    
-    def get_statistics(self) -> Dict[str, Any]:
+
+    def get_statistics(self) -> dict[str, Any]:
         """
         Get feedback statistics.
-        
+
         Returns:
             Statistics dictionary
         """
@@ -155,29 +154,28 @@ class FeedbackCollector:
             "by_type": {},
             "by_hour": {},
         }
-        
+
         for feedback in self._feedback:
             # Count by type
             type_name = feedback.type.value
             stats["by_type"][type_name] = stats["by_type"].get(type_name, 0) + 1
-            
+
             # Count by hour
-            import time
             hour = int(feedback.timestamp // 3600)
             stats["by_hour"][str(hour)] = stats["by_hour"].get(str(hour), 0) + 1
-        
+
         return stats
-    
+
     def export(
         self,
         format: str = "json",
     ) -> str:
         """
         Export feedback.
-        
+
         Args:
             format: Export format ("json" or "csv")
-            
+
         Returns:
             Exported data
         """
@@ -193,7 +191,7 @@ class FeedbackCollector:
             }
             for f in self._feedback
         ]
-        
+
         if format == "json":
             import json
             return json.dumps(data, indent=2)
@@ -205,9 +203,9 @@ class FeedbackCollector:
             writer.writeheader()
             writer.writerows(data)
             return output.getvalue()
-        
+
         return str(data)
-    
+
     def clear(self):
         """Clear all feedback."""
         self._feedback = []
@@ -220,9 +218,9 @@ _feedback_collector = FeedbackCollector()
 def collect_feedback(
     feedback_type: FeedbackType,
     message: str,
-    trace_id: Optional[str] = None,
-    user_id: Optional[str] = None,
-    metadata: Optional[Dict[str, Any]] = None,
+    trace_id: str | None = None,
+    user_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> Feedback:
     """Collect feedback (convenience function)."""
     return _feedback_collector.collect(
@@ -231,15 +229,15 @@ def collect_feedback(
 
 
 def get_feedback(
-    feedback_id: Optional[str] = None,
-    trace_id: Optional[str] = None,
-    feedback_type: Optional[FeedbackType] = None,
-) -> List[Feedback]:
+    feedback_id: str | None = None,
+    trace_id: str | None = None,
+    feedback_type: FeedbackType | None = None,
+) -> list[Feedback]:
     """Get feedback (convenience function)."""
     return _feedback_collector.get_feedback(feedback_id, trace_id, feedback_type)
 
 
-def get_feedback_statistics() -> Dict[str, Any]:
+def get_feedback_statistics() -> dict[str, Any]:
     """Get feedback statistics (convenience function)."""
     return _feedback_collector.get_statistics()
 

@@ -6,10 +6,9 @@ and visualization helpers for unified observability dashboards.
 """
 
 import time
-from typing import Dict, List, Any, Optional
 from dataclasses import dataclass, field
-from datetime import datetime
 from enum import Enum
+from typing import Any
 
 
 class MetricType(Enum):
@@ -33,7 +32,7 @@ class TimeSeriesPoint:
     """A point in a time series."""
     timestamp: float
     value: float
-    labels: Dict[str, str] = field(default_factory=dict)
+    labels: dict[str, str] = field(default_factory=dict)
 
 
 @dataclass
@@ -43,18 +42,18 @@ class Metric:
     metric_type: MetricType
     description: str = ""
     unit: str = ""
-    labels: Dict[str, str] = field(default_factory=dict)
-    data_points: List[TimeSeriesPoint] = field(default_factory=list)
-    
-    def add_point(self, value: float, labels: Optional[Dict[str, str]] = None):
+    labels: dict[str, str] = field(default_factory=dict)
+    data_points: list[TimeSeriesPoint] = field(default_factory=list)
+
+    def add_point(self, value: float, labels: dict[str, str] | None = None):
         """Add a data point to the metric."""
         self.data_points.append(TimeSeriesPoint(
             timestamp=time.time(),
             value=value,
             labels=labels or {},
         ))
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "name": self.name,
@@ -81,9 +80,9 @@ class DashboardPanel:
     panel_type: str  # e.g., "timeseries", "gauge", "counter"
     metric_name: str
     description: str = ""
-    options: Dict[str, Any] = field(default_factory=dict)
-    
-    def to_dict(self) -> Dict[str, Any]:
+    options: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "id": self.id,
@@ -101,21 +100,21 @@ class Dashboard:
     id: str
     title: str
     description: str = ""
-    panels: List[DashboardPanel] = field(default_factory=list)
+    panels: list[DashboardPanel] = field(default_factory=list)
     refresh_interval: int = 60  # seconds
     time_range: str = "1h"  # e.g., "1h", "24h", "7d"
-    
+
     def add_panel(self, panel: DashboardPanel):
         """Add a panel to the dashboard."""
         self.panels.append(panel)
-    
+
     def remove_panel(self, panel_id: str):
         """Remove a panel from the dashboard."""
         self.panels = [
             p for p in self.panels if p.id != panel_id
         ]
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "id": self.id,
@@ -130,76 +129,76 @@ class Dashboard:
 class MetricsAggregator:
     """
     Aggregate metrics data.
-    
+
     Provides functionality to:
     - Aggregate time series data
     - Calculate statistics
     - Generate aggregations
     - Support Grafana-style queries
     """
-    
+
     def __init__(self):
         """Initialize the aggregator."""
-        self._metrics: Dict[str, Metric] = {}
-    
+        self._metrics: dict[str, Metric] = {}
+
     def add_metric(self, metric: Metric) -> "MetricsAggregator":
         """
         Add a metric.
-        
+
         Args:
             metric: Metric to add
-            
+
         Returns:
             Self for method chaining
         """
         self._metrics[metric.name] = metric
         return self
-    
-    def get_metric(self, name: str) -> Optional[Metric]:
+
+    def get_metric(self, name: str) -> Metric | None:
         """
         Get a metric by name.
-        
+
         Args:
             name: Metric name
-            
+
         Returns:
             Metric or None
         """
         return self._metrics.get(name)
-    
-    def list_metrics(self) -> List[str]:
+
+    def list_metrics(self) -> list[str]:
         """List all metric names."""
         return list(self._metrics.keys())
-    
+
     def aggregate(
         self,
         metric_name: str,
         aggregation: str = "mean",
-        window: Optional[int] = None,
-    ) -> Optional[float]:
+        window: int | None = None,
+    ) -> float | None:
         """
         Aggregate metric data.
-        
+
         Args:
             metric_name: Name of the metric
             aggregation: Aggregation function ("mean", "sum", "max", "min")
             window: Time window in seconds (optional)
-            
+
         Returns:
             Aggregated value or None
         """
         metric = self._metrics.get(metric_name)
         if not metric:
             return None
-        
+
         if not metric.data_points:
             return None
-        
+
         values = [dp.value for dp in metric.data_points]
-        
+
         if not values:
             return None
-        
+
         if aggregation == "mean":
             return sum(values) / len(values)
         elif aggregation == "sum":
@@ -210,49 +209,49 @@ class MetricsAggregator:
             return min(values)
         else:
             return None
-    
+
     def range_query(
         self,
         metric_name: str,
         start_time: float,
         end_time: float,
         granularity: TimeGranularity = TimeGranularity.MINUTE,
-    ) -> List[TimeSeriesPoint]:
+    ) -> list[TimeSeriesPoint]:
         """
         Query metric data within a time range.
-        
+
         Args:
             metric_name: Name of the metric
             start_time: Start timestamp
             end_time: End timestamp
             granularity: Time granularity
-            
+
         Returns:
             List of time series points
         """
         metric = self._metrics.get(metric_name)
         if not metric:
             return []
-        
+
         # Filter by time range
         filtered = [
             dp for dp in metric.data_points
             if start_time <= dp.timestamp <= end_time
         ]
-        
+
         # TODO: Implement granularity-based aggregation
         return filtered
-    
+
     def generate_dashboard_data(
         self,
         dashboard: Dashboard,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """
         Generate data for a dashboard.
-        
+
         Args:
             dashboard: Dashboard definition
-            
+
         Returns:
             Dashboard data dictionary
         """
@@ -260,7 +259,7 @@ class MetricsAggregator:
             "dashboard": dashboard.to_dict(),
             "metrics": {},
         }
-        
+
         for panel in dashboard.panels:
             metric_data = {
                 "metric": self._metrics.get(panel.metric_name, {}).to_dict() if self._metrics.get(panel.metric_name) else {},
@@ -272,21 +271,21 @@ class MetricsAggregator:
                 },
             }
             data["metrics"][panel.metric_name] = metric_data
-        
+
         return data
 
 
 class DashboardBuilder:
     """
     Builder for creating dashboards.
-    
+
     Provides fluent API for dashboard creation.
     """
-    
+
     def __init__(self):
         """Initialize the builder."""
-        self._dashboard: Optional[Dashboard] = None
-    
+        self._dashboard: Dashboard | None = None
+
     def create_dashboard(
         self,
         dashboard_id: str,
@@ -295,12 +294,12 @@ class DashboardBuilder:
     ) -> "DashboardBuilder":
         """
         Create a new dashboard.
-        
+
         Args:
             dashboard_id: Dashboard ID
             title: Dashboard title
             description: Dashboard description
-            
+
         Returns:
             Self for method chaining
         """
@@ -310,7 +309,7 @@ class DashboardBuilder:
             description=description,
         )
         return self
-    
+
     def add_time_series_panel(
         self,
         panel_id: str,
@@ -321,20 +320,20 @@ class DashboardBuilder:
     ) -> "DashboardBuilder":
         """
         Add a time series panel.
-        
+
         Args:
             panel_id: Panel ID
             title: Panel title
             metric_name: Metric name to visualize
             description: Panel description
             y_axis_label: Y-axis label
-            
+
         Returns:
             Self for method chaining
         """
         if not self._dashboard:
             raise ValueError("Dashboard not created. Call create_dashboard() first.")
-        
+
         panel = DashboardPanel(
             id=panel_id,
             title=title,
@@ -347,10 +346,10 @@ class DashboardBuilder:
                 "show_points": True,
             },
         )
-        
+
         self._dashboard.add_panel(panel)
         return self
-    
+
     def add_gauge_panel(
         self,
         panel_id: str,
@@ -362,7 +361,7 @@ class DashboardBuilder:
     ) -> "DashboardBuilder":
         """
         Add a gauge panel.
-        
+
         Args:
             panel_id: Panel ID
             title: Panel title
@@ -370,13 +369,13 @@ class DashboardBuilder:
             description: Panel description
             min_value: Minimum value
             max_value: Maximum value
-            
+
         Returns:
             Self for method chaining
         """
         if not self._dashboard:
             raise ValueError("Dashboard not created. Call create_dashboard() first.")
-        
+
         panel = DashboardPanel(
             id=panel_id,
             title=title,
@@ -389,10 +388,10 @@ class DashboardBuilder:
                 "show_value": True,
             },
         )
-        
+
         self._dashboard.add_panel(panel)
         return self
-    
+
     def add_counter_panel(
         self,
         panel_id: str,
@@ -403,20 +402,20 @@ class DashboardBuilder:
     ) -> "DashboardBuilder":
         """
         Add a counter panel.
-        
+
         Args:
             panel_id: Panel ID
             title: Panel title
             metric_name: Metric name to visualize
             description: Panel description
             format: Value format ("short", "long", "percent")
-            
+
         Returns:
             Self for method chaining
         """
         if not self._dashboard:
             raise ValueError("Dashboard not created. Call create_dashboard() first.")
-        
+
         panel = DashboardPanel(
             id=panel_id,
             title=title,
@@ -428,47 +427,47 @@ class DashboardBuilder:
                 "show_change": True,
             },
         )
-        
+
         self._dashboard.add_panel(panel)
         return self
-    
+
     def set_refresh_interval(self, interval_seconds: int) -> "DashboardBuilder":
         """
         Set dashboard refresh interval.
-        
+
         Args:
             interval_seconds: Refresh interval in seconds
-            
+
         Returns:
             Self for method chaining
         """
         if not self._dashboard:
             raise ValueError("Dashboard not created. Call create_dashboard() first.")
-        
+
         self._dashboard.refresh_interval = interval_seconds
         return self
-    
+
     def set_time_range(self, time_range: str) -> "DashboardBuilder":
         """
         Set default time range.
-        
+
         Args:
             time_range: Time range string (e.g., "1h", "24h", "7d")
-            
+
         Returns:
             Self for method chaining
         """
         if not self._dashboard:
             raise ValueError("Dashboard not created. Call create_dashboard() first.")
-        
+
         self._dashboard.time_range = time_range
         return self
-    
+
     def build(self) -> Dashboard:
         """Build and return the dashboard."""
         if not self._dashboard:
             raise ValueError("Dashboard not created. Call create_dashboard() first.")
-        
+
         dashboard = self._dashboard
         self._dashboard = None
         return dashboard
@@ -492,11 +491,11 @@ def add_metric(metric: Metric) -> MetricsAggregator:
 def aggregate(
     metric_name: str,
     aggregation: str = "mean",
-) -> Optional[float]:
+) -> float | None:
     """Aggregate metric (convenience function)."""
     return _aggregator.aggregate(metric_name, aggregation)
 
 
-def generate_dashboard_data(dashboard: Dashboard) -> Dict[str, Any]:
+def generate_dashboard_data(dashboard: Dashboard) -> dict[str, Any]:
     """Generate dashboard data (convenience function)."""
     return _aggregator.generate_dashboard_data(dashboard)

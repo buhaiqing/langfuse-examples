@@ -6,31 +6,31 @@ including pipeline detection, context extraction, and trace propagation.
 """
 
 import os
-from typing import Dict, Any, Optional
+from typing import Any
 
 
 class GitLabCIAdapter:
     """
     Adapter for GitLab CI/CD platform.
-    
+
     Provides functionality to:
     - Detect GitLab CI environment
     - Extract pipeline, job, and stage information
     - Propagate trace IDs across layers
     - Generate GitLab CI-specific metadata
     """
-    
+
     def __init__(self):
         """Initialize the adapter."""
-        self._env: Dict[str, str] = {}
+        self._env: dict[str, str] = {}
         self._is_gitlab_ci: bool = False
-        self._pipeline: Optional[str] = None
-        self._job: Optional[str] = None
-        self._stage: Optional[str] = None
-        self._trace_id: Optional[str] = None
-        
+        self._pipeline: str | None = None
+        self._job: str | None = None
+        self._stage: str | None = None
+        self._trace_id: str | None = None
+
         self._initialize()
-    
+
     def _initialize(self):
         """Initialize from environment variables."""
         self._env = {
@@ -38,79 +38,79 @@ class GitLabCIAdapter:
             for key, value in os.environ.items()
             if key.startswith(("CI_", "GITLAB_", "RUNNER_"))
         }
-        
+
         # Check if running in GitLab CI
         self._is_gitlab_ci = self._env.get("GITLAB_CI") == "true"
-        
+
         if self._is_gitlab_ci:
             self._pipeline = self._env.get("CI_PIPELINE_ID")
             self._job = self._env.get("CI_JOB_NAME")
             self._stage = self._env.get("CI_JOB_STAGE")
             self._trace_id = self._env.get("CI_PIPELINE_ID")
-    
+
     @property
     def is_gitlab_ci(self) -> bool:
         """Check if running in GitLab CI."""
         return self._is_gitlab_ci
-    
+
     @property
-    def env(self) -> Dict[str, str]:
+    def env(self) -> dict[str, str]:
         """Get environment variables."""
         return self._env.copy()
-    
+
     @property
-    def pipeline(self) -> Optional[str]:
+    def pipeline(self) -> str | None:
         """Get pipeline ID."""
         return self._pipeline
-    
+
     @property
-    def pipeline_iid(self) -> Optional[str]:
+    def pipeline_iid(self) -> str | None:
         """Get pipeline internal ID."""
         return self._env.get("CI_PIPELINE_IID")
-    
+
     @property
-    def job(self) -> Optional[str]:
+    def job(self) -> str | None:
         """Get job name."""
         return self._job
-    
+
     @property
-    def job_id(self) -> Optional[str]:
+    def job_id(self) -> str | None:
         """Get job ID."""
         return self._env.get("CI_JOB_ID")
-    
+
     @property
-    def stage(self) -> Optional[str]:
+    def stage(self) -> str | None:
         """Get stage name."""
         return self._stage
-    
+
     @property
-    def ref(self) -> Optional[str]:
+    def ref(self) -> str | None:
         """Get ref (branch/tag)."""
         return self._env.get("CI_COMMIT_REF_NAME")
-    
+
     @property
-    def sha(self) -> Optional[str]:
+    def sha(self) -> str | None:
         """Get commit SHA."""
         return self._env.get("CI_COMMIT_SHA")
-    
+
     @property
-    def trace_id(self) -> Optional[str]:
+    def trace_id(self) -> str | None:
         """Get trace ID (pipeline ID)."""
         return self._trace_id
-    
+
     def detect(self) -> bool:
         """
         Detect if running in GitLab CI.
-        
+
         Returns:
             True if GitLab CI environment detected
         """
         return self._is_gitlab_ci
-    
-    def extract_context(self) -> Dict[str, Any]:
+
+    def extract_context(self) -> dict[str, Any]:
         """
         Extract GitLab CI context information.
-        
+
         Returns:
             Dictionary of context information
         """
@@ -118,7 +118,7 @@ class GitLabCIAdapter:
             "ci": "gitlab_ci",
             "is_gitlab_ci": self._is_gitlab_ci,
         }
-        
+
         if self._is_gitlab_ci:
             context.update({
                 "pipeline": self._pipeline,
@@ -130,19 +130,19 @@ class GitLabCIAdapter:
                 "sha": self._env.get("CI_COMMIT_SHA"),
                 "trace_id": self._trace_id,
             })
-        
+
         return context
-    
-    def get_pipeline_info(self) -> Optional[Dict[str, Any]]:
+
+    def get_pipeline_info(self) -> dict[str, Any] | None:
         """
         Get detailed pipeline information.
-        
+
         Returns:
             Pipeline information dictionary or None
         """
         if not self._is_gitlab_ci:
             return None
-        
+
         return {
             "id": self._env.get("CI_PIPELINE_ID"),
             "iid": self._env.get("CI_PIPELINE_IID"),
@@ -163,17 +163,17 @@ class GitLabCIAdapter:
                 "id": self._env.get("CI_USER_ID"),
             },
         }
-    
-    def get_job_info(self) -> Optional[Dict[str, Any]]:
+
+    def get_job_info(self) -> dict[str, Any] | None:
         """
         Get detailed job information.
-        
+
         Returns:
             Job information dictionary or None
         """
         if not self._is_gitlab_ci:
             return None
-        
+
         return {
             "id": self._env.get("CI_JOB_ID"),
             "name": self._env.get("CI_JOB_NAME"),
@@ -194,49 +194,49 @@ class GitLabCIAdapter:
                 },
             },
         }
-    
-    def get_stage_info(self) -> Optional[Dict[str, Any]]:
+
+    def get_stage_info(self) -> dict[str, Any] | None:
         """
         Get detailed stage information.
-        
+
         Returns:
             Stage information dictionary or None
         """
         if not self._is_gitlab_ci:
             return None
-        
+
         return {
             "name": self._stage,
             "pipeline_id": self._pipeline,
             "status": self._env.get("CI_JOB_STATUS"),
         }
-    
+
     def propagate_trace_id(self, target_trace_id: str) -> bool:
         """
         Propagate trace ID to target layer.
-        
+
         Args:
             target_trace_id: Target trace ID (Skill or MCP)
-            
+
         Returns:
             True if propagation successful
         """
         if not self._is_gitlab_ci:
             return False
-        
+
         # Store for later use
         return True
-    
-    def generate_pipeline_summary(self) -> Optional[str]:
+
+    def generate_pipeline_summary(self) -> str | None:
         """
         Generate a summary of the current pipeline execution.
-        
+
         Returns:
             Summary string or None
         """
         if not self._is_gitlab_ci:
             return None
-        
+
         parts = [
             f"Pipeline: #{self._env.get('CI_PIPELINE_IID')}",
             f"Project: {self._env.get('CI_PROJECT_PATH')}",
@@ -245,50 +245,50 @@ class GitLabCIAdapter:
             f"Stage: {self._stage}",
             f"Job: {self._job}",
         ]
-        
+
         return " | ".join(parts)
-    
+
     def is_manual(self) -> bool:
         """Check if pipeline was triggered manually."""
         return self._env.get("CI_PIPELINE_SOURCE") == "web"
-    
+
     def is_push(self) -> bool:
         """Check if pipeline was triggered by push."""
         return self._env.get("CI_PIPELINE_SOURCE") == "push"
-    
+
     def is_schedule(self) -> bool:
         """Check if pipeline was triggered by schedule."""
         return self._env.get("CI_PIPELINE_SOURCE") == "schedule"
-    
+
     def is_web(self) -> bool:
         """Check if pipeline was triggered from web UI."""
         return self._env.get("CI_PIPELINE_SOURCE") == "web"
-    
+
     def is_api(self) -> bool:
         """Check if pipeline was triggered by API."""
         return self._env.get("CI_PIPELINE_SOURCE") == "api"
-    
+
     def is_external(self) -> bool:
         """Check if pipeline is from external source (fork)."""
         return self._env.get("CI_EXTERNAL_PULL_REQUEST_IID") is not None
-    
-    def get_pipeline_status(self) -> Optional[str]:
+
+    def get_pipeline_status(self) -> str | None:
         """Get pipeline status."""
         return self._env.get("CI_PIPELINE_STATUS")
-    
-    def get_job_status(self) -> Optional[str]:
+
+    def get_job_status(self) -> str | None:
         """Get job status."""
         return self._env.get("CI_JOB_STATUS")
-    
-    def get_job_duration(self) -> Optional[str]:
+
+    def get_job_duration(self) -> str | None:
         """Get job duration."""
         return self._env.get("CI_JOB_DURATION")
-    
-    def get_job_started_at(self) -> Optional[str]:
+
+    def get_job_started_at(self) -> str | None:
         """Get job start time."""
         return self._env.get("CI_JOB_STARTED_AT")
-    
-    def get_job_finished_at(self) -> Optional[str]:
+
+    def get_job_finished_at(self) -> str | None:
         """Get job finish time."""
         return self._env.get("CI_JOB_FINISHED_AT")
 
@@ -296,50 +296,50 @@ class GitLabCIAdapter:
 def detect_gitlab_ci() -> bool:
     """
     Detect if running in GitLab CI environment.
-    
+
     Returns:
         True if GitLab CI detected
     """
     return os.getenv("GITLAB_CI") == "true"
 
 
-def get_gitlab_context() -> Dict[str, Any]:
+def get_gitlab_context() -> dict[str, Any]:
     """
     Get GitLab CI context as dictionary.
-    
+
     Returns:
         Dictionary of GitLab context
     """
     if not detect_gitlab_ci():
         return {"ci": "not_gitlab_ci"}
-    
+
     adapter = GitLabCIAdapter()
     return adapter.extract_context()
 
 
-def get_gitlab_pipeline_info() -> Optional[Dict[str, Any]]:
+def get_gitlab_pipeline_info() -> dict[str, Any] | None:
     """
     Get GitLab CI pipeline information.
-    
+
     Returns:
         Pipeline information dictionary or None
     """
     if not detect_gitlab_ci():
         return None
-    
+
     adapter = GitLabCIAdapter()
     return adapter.get_pipeline_info()
 
 
-def generate_gitlab_summary() -> Optional[str]:
+def generate_gitlab_summary() -> str | None:
     """
     Generate a summary of GitLab CI execution.
-    
+
     Returns:
         Summary string or None
     """
     if not detect_gitlab_ci():
         return None
-    
+
     adapter = GitLabCIAdapter()
     return adapter.generate_pipeline_summary()

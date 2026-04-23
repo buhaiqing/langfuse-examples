@@ -2,19 +2,21 @@
 Unit tests for ManifestParser.
 """
 
-import pytest
 from pathlib import Path
+
+import pytest
+
 from skill_observability_toolkit.stop.manifest import (
-    ManifestParser,
+    Assertion,
+    ManifestError,
     ManifestParseError,
+    ManifestParser,
     ManifestValidationError,
     SkillInput,
+    SkillManifest,
     SkillOutput,
     ToolReference,
-    Assertion,
     TrustScoreConfig,
-    SkillManifest,
-    ManifestError,
 )
 
 
@@ -65,7 +67,7 @@ class TestManifestParserParse:
     def test_parse_no_content_or_path(self):
         """Parse with no content or path raises error."""
         parser = ManifestParser()
-        
+
         with pytest.raises(ManifestParseError, match="No content or skill_yaml_path"):
             parser.parse()
 
@@ -77,7 +79,7 @@ class TestManifestParserParse:
         version: 1.0
         this: is: invalid: yaml
         """
-        
+
         with pytest.raises(ManifestParseError, match="Failed to parse YAML"):
             parser.parse(content=invalid_yaml)
 
@@ -89,7 +91,7 @@ class TestManifestParserParse:
         version: 1.0.0
         description: Missing SOP
         """
-        
+
         with pytest.raises(ManifestParseError, match="Missing required fields: sop"):
             parser.parse(content=incomplete)
 
@@ -102,7 +104,7 @@ class TestManifestParserParse:
         sop: |
           Test
         """
-        
+
         # Should not raise immediately during parsing, but during validation
         manifest = parser.parse(content=invalid_types)
         assert manifest is not None
@@ -110,7 +112,7 @@ class TestManifestParserParse:
     def test_parse_duplicate_input_names(self, duplicate_inputs_content: str):
         """Parse with duplicate input names."""
         parser = ManifestParser()
-        
+
         with pytest.raises(ManifestValidationError, match="Input parameter names must be unique"):
             parser.parse(content=duplicate_inputs_content)
 
@@ -122,14 +124,14 @@ class TestManifestParserValidate:
         """Validate a valid manifest."""
         parser = ManifestParser()
         errors = parser.validate(valid_manifest)
-        
+
         assert errors == []
 
     def test_validate_empty_name(self, valid_manifest: SkillManifest):
         """Validate manifest with empty name."""
         valid_manifest.name = ""
         parser = ManifestParser()
-        
+
         errors = parser.validate(valid_manifest)
         assert any("Skill name cannot be empty" in e for e in errors)
 
@@ -137,7 +139,7 @@ class TestManifestParserValidate:
         """Validate manifest with empty version."""
         valid_manifest.version = ""
         parser = ManifestParser()
-        
+
         errors = parser.validate(valid_manifest)
         assert any("Skill version cannot be empty" in e for e in errors)
 
@@ -148,7 +150,7 @@ class TestManifestParserValidate:
             SkillInput(name="data", type="object", description="Second"),
         ]
         parser = ManifestParser()
-        
+
         errors = parser.validate(valid_manifest)
         assert any("Input parameter names must be unique" in e for e in errors)
 
@@ -159,7 +161,7 @@ class TestManifestParserValidate:
             SkillOutput(name="result", type="object", description="Second"),
         ]
         parser = ManifestParser()
-        
+
         errors = parser.validate(valid_manifest)
         assert any("Output parameter names must be unique" in e for e in errors)
 
@@ -170,7 +172,7 @@ class TestManifestParserValidate:
             ToolReference(name="tool1", version="2.0", description="Second"),
         ]
         parser = ManifestParser()
-        
+
         errors = parser.validate(valid_manifest)
         assert any("Tool names must be unique" in e for e in errors)
 
@@ -180,7 +182,7 @@ class TestManifestParserValidate:
             Assertion(check="", message="Test"),
         ]
         parser = ManifestParser()
-        
+
         errors = parser.validate(valid_manifest)
         assert any("Assertion 'check' field is required" in e for e in errors)
 
@@ -190,7 +192,7 @@ class TestManifestParserValidate:
             Assertion(check="file_exists", message=""),
         ]
         parser = ManifestParser()
-        
+
         errors = parser.validate(valid_manifest)
         assert any("Assertion 'message' field is required" in e for e in errors)
 
@@ -200,7 +202,7 @@ class TestManifestParserValidate:
             Assertion(check="file_exists", message="Test", type="invalid"),
         ]
         parser = ManifestParser()
-        
+
         errors = parser.validate(valid_manifest)
         assert any("Assertion type must be 'pre' or 'post'" in e for e in errors)
 
@@ -211,45 +213,45 @@ class TestManifestParserTrustScore:
     def test_add_trust_score_all_passed(self):
         """Calculate trust score when all assertions pass."""
         parser = ManifestParser()
-        
+
         results = [
             {"passed": True},
             {"passed": True},
             {"passed": True},
         ]
-        
+
         score = parser.add_trust_score(results)
         assert score == 1.0
 
     def test_add_trust_score_partial_passed(self):
         """Calculate trust score with partial passes."""
         parser = ManifestParser()
-        
+
         results = [
             {"passed": True},
             {"passed": True},
             {"passed": False},
         ]
-        
+
         score = parser.add_trust_score(results)
         assert score == 2.0 / 3.0
 
     def test_add_trust_score_none_passed(self):
         """Calculate trust score when none pass."""
         parser = ManifestParser()
-        
+
         results = [
             {"passed": False},
             {"passed": False},
         ]
-        
+
         score = parser.add_trust_score(results)
         assert score == 0.0
 
     def test_add_trust_score_empty(self):
         """Calculate trust score with no results."""
         parser = ManifestParser()
-        
+
         score = parser.add_trust_score([])
         assert score == 1.0  # No assertions = perfect trust
 
@@ -266,9 +268,9 @@ class TestDataClasses:
             required=True,
             default="default_value",
         )
-        
+
         result = inp.to_dict()
-        
+
         assert result["name"] == "test_input"
         assert result["type"] == "string"
         assert result["description"] == "Test"
@@ -283,9 +285,9 @@ class TestDataClasses:
             description="Test",
             properties={"field1": "string", "field2": "integer"},
         )
-        
+
         result = out.to_dict()
-        
+
         assert result["name"] == "test_output"
         assert result["type"] == "object"
         assert result["properties"] == {"field1": "string", "field2": "integer"}
@@ -297,9 +299,9 @@ class TestDataClasses:
             version="2.0",
             description="Test tool",
         )
-        
+
         result = tool.to_dict()
-        
+
         assert result["name"] == "test_tool"
         assert result["version"] == "2.0"
         assert result["description"] == "Test tool"
@@ -313,9 +315,9 @@ class TestDataClasses:
             message="Data must exist",
             type="pre",
         )
-        
+
         result = assertion.to_dict()
-        
+
         assert result["check"] == "file_exists"
         assert result["path"] == "${inputs.data}"
         assert result["condition"] == "len(${inputs.data}) > 0"
@@ -329,9 +331,9 @@ class TestDataClasses:
             history_window=60,
             min_pass_rate=0.9,
         )
-        
+
         result = config.to_dict()
-        
+
         assert result["enabled"] is True
         assert result["history_window"] == 60
         assert result["min_pass_rate"] == 0.9
@@ -339,7 +341,7 @@ class TestDataClasses:
     def test_skill_manifest_to_dict(self, valid_manifest: SkillManifest):
         """SkillManifest.to_dict() conversion."""
         result = valid_manifest.to_dict()
-        
+
         assert result["name"] == valid_manifest.name
         assert result["version"] == valid_manifest.version
         assert isinstance(result["inputs"], list)

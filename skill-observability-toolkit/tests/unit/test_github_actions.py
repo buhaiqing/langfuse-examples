@@ -1,1 +1,3 @@
-# GitHub Actions tests
+"""Unit tests placeholder."""
+class TestPlaceholder:
+    pass

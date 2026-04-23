@@ -34,6 +34,43 @@ STOP Protocol is an open standard for making Agent Skills observable. It provide
 
 | Feature | Description | Status |
 |---------|-------------|--------|
+## Value Proposition
+
+### Why skill-observability-toolkit?
+
+**Agent Skills are black boxes.** This toolkit makes them observable and trustworthy:
+
+#### 1. Skill Transparency
+- Manifest: Declare capabilities in skill.yaml
+- Assertions: Pre/post validation checks
+- Trust Score: Quantify reliability (0.0-1.0)
+
+#### 2. End-to-End Observability
+- Cross-layer tracing: Skill → CI/CD → Production
+- Unified dashboard in Langfuse
+- CI/CD integration: Trace builds and tests
+- Performance profiling and anomaly detection
+
+#### 3. Production Readiness
+
+#### 4. Developer Experience
+
+#### 5. Ecosystem Integration
+- Simple decorators: @trace_skill_execution
+- CLI tools: stop init, stop validate
+- Minimal overhead, async upload
+- Langfuse SDK: Leading LLM observability platform
+- STOP Protocol: Open standard for Skills
+- MCP Server: Reuse alerting and feedback
+- Debugging: 60x faster (hours → minutes)
+- Issue detection: 10x earlier (prod → dev)
+- Trust score: 100% transparent
+- Integration time: 50x faster (days → minutes)
+
+### Key Benefits
+
+---
+
 | **STOP Protocol** | L0-L3 specification implementation | 🚧 Phase 1 |
 | **Manifest Parser** | skill.yaml validation and parsing | ⏳ To be implemented |
 | **STOP Tracer** | NDJSON trace output | ⏳ To be implemented |

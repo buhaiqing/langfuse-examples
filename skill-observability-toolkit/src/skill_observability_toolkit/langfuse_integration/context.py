@@ -6,21 +6,21 @@ This module provides context-based trace ID propagation using contextvars.
 
 import uuid
 from contextvars import ContextVar
-from typing import Optional, Dict, Any
+from typing import Any
 
 # Trace ID context
-_trace_id_context: ContextVar[Optional[str]] = ContextVar(
+_trace_id_context: ContextVar[str | None] = ContextVar(
     "trace_id", default=None
 )
 
 # Parent trace ID context (for cross-layer correlation)
-_parent_trace_id_context: ContextVar[Optional[str]] = ContextVar(
+_parent_trace_id_context: ContextVar[str | None] = ContextVar(
     "parent_trace_id", default=None
 )
 
 # Current span context (stack of active spans)
 _current_span_stack: ContextVar[list] = ContextVar(
-    "span_stack", default=[]
+    "span_stack", default=None
 )
 
 
@@ -29,7 +29,7 @@ def set_trace_id(trace_id: str) -> None:
     _trace_id_context.set(trace_id)
 
 
-def get_trace_id() -> Optional[str]:
+def get_trace_id() -> str | None:
     """Get the current trace ID."""
     return _trace_id_context.get()
 
@@ -37,10 +37,10 @@ def get_trace_id() -> Optional[str]:
 def generate_trace_id(prefix: str = "skill") -> str:
     """
     Generate a new trace ID.
-    
+
     Args:
         prefix: Prefix for trace ID
-        
+
     Returns:
         Generated trace ID
     """
@@ -54,25 +54,25 @@ def set_parent_trace_id(parent_trace_id: str) -> None:
     _parent_trace_id_context.set(parent_trace_id)
 
 
-def get_parent_trace_id() -> Optional[str]:
+def get_parent_trace_id() -> str | None:
     """Get the parent trace ID."""
     return _parent_trace_id_context.get()
 
 
-def get_current_span() -> Optional[Dict[str, Any]]:
+def get_current_span() -> dict[str, Any] | None:
     """Get the current active span."""
     stack = _current_span_stack.get()
     return stack[-1] if stack else None
 
 
-def push_span(span: Dict[str, Any]) -> None:
+def push_span(span: dict[str, Any]) -> None:
     """Push a span onto the context stack."""
     stack = _current_span_stack.get([])
     stack.append(span)
     _current_span_stack.set(stack)
 
 
-def pop_span() -> Optional[Dict[str, Any]]:
+def pop_span() -> dict[str, Any] | None:
     """Pop the current span from the context stack."""
     stack = _current_span_stack.get()
     if stack:
@@ -91,16 +91,16 @@ def clear_trace_context() -> None:
 
 class TraceContextManager:
     """Context manager for trace context."""
-    
+
     def __init__(
         self,
-        trace_id: Optional[str] = None,
-        parent_trace_id: Optional[str] = None,
+        trace_id: str | None = None,
+        parent_trace_id: str | None = None,
     ):
         self.trace_id = trace_id
         self.parent_trace_id = parent_trace_id
         self._tokens = []
-    
+
     def __enter__(self):
         """Enter context manager."""
         if self.trace_id:
@@ -108,7 +108,7 @@ class TraceContextManager:
         if self.parent_trace_id:
             self._tokens.append(_parent_trace_id_context.set(self.parent_trace_id))
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit context manager and restore context."""
         for token in reversed(self._tokens):
@@ -116,22 +116,22 @@ class TraceContextManager:
                 _trace_id_context.reset(token)
             except Exception:
                 pass
-        
+
         self._tokens = []
         return False
 
 
 def create_trace_context(
-    trace_id: Optional[str] = None,
-    parent_trace_id: Optional[str] = None,
+    trace_id: str | None = None,
+    parent_trace_id: str | None = None,
 ) -> TraceContextManager:
     """
     Create a trace context manager.
-    
+
     Args:
         trace_id: Trace ID (if None, auto-generated)
         parent_trace_id: Parent trace ID
-        
+
     Returns:
         TraceContextManager instance
     """

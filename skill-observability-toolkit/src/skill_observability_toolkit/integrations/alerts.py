@@ -4,11 +4,10 @@ Alert System Integration.
 This module provides integration with the alert system from mcp-with-tracing.
 """
 
-import os
 import re
-from typing import Dict, List, Optional, Any
 from dataclasses import dataclass, field
 from enum import Enum
+from typing import Any
 
 
 class AlertSeverity(Enum):
@@ -28,10 +27,10 @@ class AlertRule:
     severity: AlertSeverity
     expression: str  # e.g., "duration_ms > 5000"
     enabled: bool = True
-    tags: List[str] = field(default_factory=list)
-    annotations: Dict[str, str] = field(default_factory=dict)
-    
-    def to_dict(self) -> Dict[str, Any]:
+    tags: list[str] = field(default_factory=list)
+    annotations: dict[str, str] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "name": self.name,
@@ -53,11 +52,11 @@ class Alert:
     severity: AlertSeverity
     message: str
     timestamp: float
-    tags: List[str] = field(default_factory=list)
-    annotations: Dict[str, str] = field(default_factory=dict)
-    context: Dict[str, Any] = field(default_factory=dict)
-    
-    def to_dict(self) -> Dict[str, Any]:
+    tags: list[str] = field(default_factory=list)
+    annotations: dict[str, str] = field(default_factory=dict)
+    context: dict[str, Any] = field(default_factory=dict)
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "id": self.id,
@@ -75,46 +74,46 @@ class Alert:
 class AlertManager:
     """
     Manage alerting system.
-    
+
     Provides functionality to:
     - Load alert rules from YAML
     - Evaluate alert conditions
     - Trigger alerts
     - Send notifications
     """
-    
-    def __init__(self, config_path: Optional[str] = None):
+
+    def __init__(self, config_path: str | None = None):
         """
         Initialize the alert manager.
-        
+
         Args:
             config_path: Path to alert config YAML file
         """
-        self._rules: Dict[str, AlertRule] = {}
-        self._active_alerts: Dict[str, Alert] = {}
+        self._rules: dict[str, AlertRule] = {}
+        self._active_alerts: dict[str, Alert] = {}
         self._config_path = config_path
-        
+
         # Try to load config
         if config_path:
             self.load_config(config_path)
-    
+
     def load_config(self, config_path: str) -> "AlertManager":
         """
         Load alert rules from YAML config.
-        
+
         Args:
             config_path: Path to config file
-            
+
         Returns:
             Self for method chaining
         """
         # TODO: Implement YAML loading
         # For now, load default rules
         self._rules = self._load_default_rules()
-        
+
         return self
-    
-    def _load_default_rules(self) -> Dict[str, AlertRule]:
+
+    def _load_default_rules(self) -> dict[str, AlertRule]:
         """Load default alert rules."""
         return {
             "high_latency": AlertRule(
@@ -154,53 +153,53 @@ class AlertManager:
                 },
             ),
         }
-    
+
     def register_rule(self, rule: AlertRule) -> "AlertManager":
         """
         Register a new alert rule.
-        
+
         Args:
             rule: Alert rule to register
-            
+
         Returns:
             Self for method chaining
         """
         self._rules[rule.name] = rule
         return self
-    
+
     def unregister_rule(self, rule_name: str) -> "AlertManager":
         """
         Remove an alert rule.
-        
+
         Args:
             rule_name: Name of rule to remove
-            
+
         Returns:
             Self for method chaining
         """
         if rule_name in self._rules:
             del self._rules[rule_name]
         return self
-    
-    def evaluate(self, rule_name: str, context: Dict[str, Any]) -> Optional[Alert]:
+
+    def evaluate(self, rule_name: str, context: dict[str, Any]) -> Alert | None:
         """
         Evaluate an alert rule against context.
-        
+
         Args:
             rule_name: Name of rule to evaluate
             context: Context data to evaluate against
-            
+
         Returns:
             Alert if triggered, None otherwise
         """
         rule = self._rules.get(rule_name)
-        
+
         if not rule:
             return None
-        
+
         if not rule.enabled:
             return None
-        
+
         # Parse and evaluate expression
         if self._evaluate_expression(rule.expression, context):
             # Generate alert
@@ -215,45 +214,45 @@ class AlertManager:
                 annotations=rule.annotations.copy(),
                 context=context,
             )
-            
+
             self._active_alerts[alert.id] = alert
-            
+
             return alert
-        
+
         return None
-    
+
     def _evaluate_expression(
         self,
         expression: str,
-        context: Dict[str, Any],
+        context: dict[str, Any],
     ) -> bool:
         """
         Evaluate alert expression against context.
-        
+
         Args:
             expression: Alert expression (e.g., "duration_ms > 5000")
             context: Context data
-            
+
         Returns:
             True if expression evaluates to True
         """
         # Parse simple expression (field operator value)
         # e.g., "duration_ms > 5000"
         match = re.match(r"(\w+)\s*([<>=!]+)\s*([\d.]+)", expression)
-        
+
         if not match:
             return False
-        
+
         field_name, operator, value = match.groups()
         value = float(value)
-        
+
         field_value = context.get(field_name)
-        
+
         if field_value is None:
             return False
-        
+
         field_value = float(field_value)
-        
+
         if operator == ">":
             return field_value > value
         elif operator == "<":
@@ -266,47 +265,47 @@ class AlertManager:
             return field_value == value
         elif operator == "!=":
             return field_value != value
-        
+
         return False
-    
+
     def _generate_alert_id(self, rule_name: str) -> str:
         """Generate unique alert ID."""
         import uuid
         return f"alert_{rule_name}_{uuid.uuid4().hex[:8]}"
-    
+
     def _generate_alert_message(
         self,
         rule: AlertRule,
-        context: Dict[str, Any],
+        context: dict[str, Any],
     ) -> str:
         """Generate alert message."""
         # Extract values from context
         values = []
         for key, value in context.items():
             values.append(f"{key}={value}")
-        
+
         return f"{rule.name}: {' | '.join(values)}"
-    
+
     def _current_timestamp(self) -> float:
         """Get current timestamp."""
         import time
         return time.time()
-    
-    def get_rule(self, rule_name: str) -> Optional[AlertRule]:
+
+    def get_rule(self, rule_name: str) -> AlertRule | None:
         """Get an alert rule."""
         return self._rules.get(rule_name)
-    
-    def get_active_alerts(self) -> Dict[str, Alert]:
+
+    def get_active_alerts(self) -> dict[str, Alert]:
         """Get all active alerts."""
         return self._active_alerts.copy()
-    
+
     def resolve_alert(self, alert_id: str) -> bool:
         """
         Resolve an alert.
-        
+
         Args:
             alert_id: ID of alert to resolve
-            
+
         Returns:
             True if resolved
         """
@@ -314,8 +313,8 @@ class AlertManager:
             del self._active_alerts[alert_id]
             return True
         return False
-    
-    def to_dict(self) -> Dict[str, Any]:
+
+    def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
         return {
             "rules": {name: rule.to_dict() for name, rule in self._rules.items()},
@@ -336,8 +335,8 @@ def load_alert_config(config_path: str) -> AlertManager:
 
 def evaluate_alert(
     rule_name: str,
-    context: Dict[str, Any],
-) -> Optional[Alert]:
+    context: dict[str, Any],
+) -> Alert | None:
     """Evaluate alert rule (convenience function)."""
     return _alert_manager.evaluate(rule_name, context)
 

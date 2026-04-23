@@ -4,10 +4,7 @@ CLI: Initialize Skill Project.
 This module provides the 'stop init' command to create a new Skill project.
 """
 
-import os
-import shutil
 from pathlib import Path
-from typing import Optional
 
 import typer
 
@@ -23,7 +20,7 @@ def create_skill_structure(project_dir: Path) -> None:
         "examples",
         ".sop/logs",
     ]
-    
+
     for dir_name in dirs:
         (project_dir / dir_name).mkdir(parents=True, exist_ok=True)
 
@@ -75,7 +72,7 @@ no_implicit_optional = true
 testpaths = ["tests"]
 addopts = "-v --no-cov"
 """
-    
+
     (project_dir / "pyproject.toml").write_text(content)
 
 
@@ -123,17 +120,17 @@ assertions:
     - check: "string_not_empty"
       value: "${inputs.query}"
       message: "Query must not be empty"
-  
+
   post:
     - check: "output_exists"
       field: "response"
       message: "Response field must exist"
-    
+
     - check: "string_not_empty"
       value: "${outputs.response}"
       message: "Response must not be empty"
 """
-    
+
     (project_dir / "skill.yaml").write_text(content)
 
 
@@ -152,7 +149,7 @@ def execute_skill(query: str) -> dict:
         "query": query,
         "response": f"Response to: {query}",
     }
-    
+
     return result
 
 
@@ -167,7 +164,7 @@ if __name__ == "__main__":
     result = execute_skill("What is AI?")
     print(result)
 '''
-    
+
     (project_dir / "src" / "main.py").write_text(content)
 
 
@@ -202,7 +199,7 @@ pytest
 
 - [STOP Protocol](https://agentskills.io/docs)
 """
-    
+
     (project_dir / "README.md").write_text(content)
 
 
@@ -213,29 +210,29 @@ def init(
 ):
     """Initialize a new Skill project."""
     project_dir = Path(output_dir) / project_name
-    
+
     if project_dir.exists():
         print(f"❌ Project directory already exists: {project_dir}")
         raise typer.Exit(code=1)
-    
+
     # Create structure
     create_skill_structure(project_dir)
-    
+
     # Create files
     create_pyproject_toml(project_dir)
     create_skill_yaml(project_dir)
     create_main_py(project_dir)
     create_readme_md(project_dir)
-    
+
     print(f"✅ Skill project initialized: {project_dir}")
-    print(f"📁 Project structure created")
-    print(f"📄 skill.yaml manifest created")
-    print(f"📝 main.py entry point created")
-    print(f"📚 README.md created")
-    print(f"\nNext steps:")
+    print("📁 Project structure created")
+    print("📄 skill.yaml manifest created")
+    print("📝 main.py entry point created")
+    print("📚 README.md created")
+    print("\nNext steps:")
     print(f"  cd {project_name}")
-    print(f"  pip install -e .")
-    print(f"  typer run src/main.py")
+    print("  pip install -e .")
+    print("  typer run src/main.py")
 
 
 if __name__ == "__main__":

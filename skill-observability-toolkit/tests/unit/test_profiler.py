@@ -1,1 +1,3 @@
-# Profiler tests
+"""Unit tests placeholder."""
+class TestPlaceholder:
+    pass

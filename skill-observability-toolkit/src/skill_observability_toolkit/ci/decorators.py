@@ -8,12 +8,12 @@ with support for GitHub Actions and GitLab CI.
 import functools
 import os
 import time
-from typing import Any, Callable, Dict, List, Optional
+from collections.abc import Callable
+from typing import Any
 
 from skill_observability_toolkit.langfuse_integration.client import LangfuseClient
 from skill_observability_toolkit.langfuse_integration.context import (
     get_trace_id,
-    get_parent_trace_id,
     set_parent_trace_id,
 )
 
@@ -21,18 +21,18 @@ from skill_observability_toolkit.langfuse_integration.context import (
 def trace_ci_step(
     step_name: str,
     step_type: str = "unknown",
-    trace_id: Optional[str] = None,
+    trace_id: str | None = None,
     auto_capture_env: bool = True,
 ):
     """
     Decorator for tracing CI/CD pipeline steps.
-    
+
     Args:
         step_name: Name of the CI step (e.g., "install", "build", "test")
         step_type: Type of step (build, test, deploy, etc.)
         trace_id: Optional trace ID (if None, uses current context)
         auto_capture_env: Whether to auto capture CI environment variables
-        
+
     Returns:
         Decorated function
     """
@@ -41,25 +41,25 @@ def trace_ci_step(
         def wrapper(*args, **kwargs):
             client = LangfuseClient.get_instance()
             ci_env = _capture_ci_environment() if auto_capture_env else {}
-            
+
             # Generate or use provided trace ID
             current_trace_id = trace_id or get_trace_id()
             if not current_trace_id:
                 import uuid
                 current_trace_id = f"ci_build_{uuid.uuid4().hex[:12]}"
-            
+
             # Set parent trace ID for cross-layer correlation
             if ci_env.get("ci_trace_id"):
                 set_parent_trace_id(ci_env["ci_trace_id"])
-            
+
             start_time = time.time()
-            
+
             try:
                 # Execute step
                 result = func(*args, **kwargs)
-                
+
                 duration_ms = (time.time() - start_time) * 1000
-                
+
                 # Score trace if Langfuse available
                 if client:
                     client.score_trace(
@@ -72,12 +72,12 @@ def trace_ci_step(
                         value=1,
                         data_type="BOOLEAN",
                     )
-                
+
                 return result
-                
+
             except Exception as e:
                 duration_ms = (time.time() - start_time) * 1000
-                
+
                 # Score trace with error
                 if client:
                     client.score_trace(
@@ -90,31 +90,31 @@ def trace_ci_step(
                         value=str(e),
                         data_type="CATEGORICAL",
                     )
-                
+
                 raise
-                
+
             finally:
                 # Optionally end trace (depends on use case)
                 # For pipeline-level tracing, might want to keep trace open
                 pass
-        
+
         return wrapper
     return decorator
 
 
 def trace_ci_stage(
     stage_name: str,
-    trace_id: Optional[str] = None,
+    trace_id: str | None = None,
     auto_capture_env: bool = True,
 ):
     """
     Decorator for tracing CI/CD pipeline stages (collection of steps).
-    
+
     Args:
         stage_name: Name of the stage (e.g., "build", "test", "deploy")
         trace_id: Optional trace ID
         auto_capture_env: Whether to auto capture CI environment
-        
+
     Returns:
         Decorated function
     """
@@ -122,20 +122,20 @@ def trace_ci_stage(
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             client = LangfuseClient.get_instance()
-            ci_env = _capture_ci_environment() if auto_capture_env else {}
-            
+            _capture_ci_environment() if auto_capture_env else {}
+
             current_trace_id = trace_id or get_trace_id()
             if not current_trace_id:
                 import uuid
                 current_trace_id = f"ci_stage_{uuid.uuid4().hex[:12]}"
-            
+
             start_time = time.time()
-            
+
             try:
                 result = func(*args, **kwargs)
-                
+
                 duration_ms = (time.time() - start_time) * 1000
-                
+
                 if client:
                     client.score_trace(
                         name=f"ci_stage_{stage_name}_duration_ms",
@@ -147,38 +147,38 @@ def trace_ci_stage(
                         value=1,
                         data_type="BOOLEAN",
                     )
-                
+
                 return result
-                
-            except Exception as e:
+
+            except Exception:
                 duration_ms = (time.time() - start_time) * 1000
-                
+
                 if client:
                     client.score_trace(
                         name=f"ci_stage_{stage_name}_success",
                         value=0,
                         data_type="BOOLEAN",
                     )
-                
+
                 raise
-        
+
         return wrapper
     return decorator
 
 
 def trace_ci_job(
     job_name: str,
-    trace_id: Optional[str] = None,
+    trace_id: str | None = None,
     auto_capture_env: bool = True,
 ):
     """
     Decorator for tracing CI/CD pipeline jobs.
-    
+
     Args:
         job_name: Name of the job
         trace_id: Optional trace ID
         auto_capture_env: Whether to auto capture CI environment
-        
+
     Returns:
         Decorated function
     """
@@ -186,19 +186,19 @@ def trace_ci_job(
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             client = LangfuseClient.get_instance()
-            
+
             current_trace_id = trace_id or get_trace_id()
             if not current_trace_id:
                 import uuid
                 current_trace_id = f"ci_job_{uuid.uuid4().hex[:12]}"
-            
+
             start_time = time.time()
-            
+
             try:
                 result = func(*args, **kwargs)
-                
+
                 duration_ms = (time.time() - start_time) * 1000
-                
+
                 if client:
                     client.score_trace(
                         name=f"ci_job_{job_name}_duration_ms",
@@ -210,34 +210,34 @@ def trace_ci_job(
                         value=1,
                         data_type="BOOLEAN",
                     )
-                
+
                 return result
-                
-            except Exception as e:
+
+            except Exception:
                 duration_ms = (time.time() - start_time) * 1000
-                
+
                 if client:
                     client.score_trace(
                         name=f"ci_job_{job_name}_success",
                         value=0,
                         data_type="BOOLEAN",
                     )
-                
+
                 raise
-        
+
         return wrapper
     return decorator
 
 
-def _capture_ci_environment() -> Dict[str, Any]:
+def _capture_ci_environment() -> dict[str, Any]:
     """
     Capture CI environment variables.
-    
+
     Returns:
         Dictionary of CI environment variables
     """
     env_vars = {}
-    
+
     # GitHub Actions
     if os.getenv("GITHUB_ACTIONS") == "true":
         env_vars.update({
@@ -253,7 +253,7 @@ def _capture_ci_environment() -> Dict[str, Any]:
             "ci_ref": os.getenv("GITHUB_REF"),
             "ci_sha": os.getenv("GITHUB_SHA"),
         })
-    
+
     # GitLab CI
     elif os.getenv("GITLAB_CI") == "true":
         env_vars.update({
@@ -268,14 +268,14 @@ def _capture_ci_environment() -> Dict[str, Any]:
             "ci_user_name": os.getenv("CI_USER_NAME"),
             "ci_user_email": os.getenv("CI_USER_EMAIL"),
         })
-    
+
     # Other CI systems
     else:
         env_vars.update({
             "ci": "other",
             "ci_trace_id": os.getenv("CI_BUILD_ID"),
         })
-    
+
     return env_vars
 
 

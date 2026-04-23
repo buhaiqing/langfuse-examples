@@ -1,1 +1,3 @@
-# GitLab CI tests
+"""Unit tests placeholder."""
+class TestPlaceholder:
+    pass

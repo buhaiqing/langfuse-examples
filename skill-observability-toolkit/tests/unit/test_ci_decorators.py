@@ -1,1 +1,1 @@
-# CI/CD tests
+"""Unit tests for CI/CD decorators."""
