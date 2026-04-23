@@ -540,3 +540,9 @@ def trace_skill_execution(
         return wrapper
 
     return decorator
+
+
+# Register tracer context with core abstraction layer to avoid circular imports
+# Import at module level after all classes are defined
+from skill_observability_toolkit.core import register_trace_context
+register_trace_context(tracer_context)

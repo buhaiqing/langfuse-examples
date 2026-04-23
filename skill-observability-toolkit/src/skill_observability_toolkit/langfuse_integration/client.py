@@ -5,11 +5,14 @@ This module provides a wrapper around the Langfuse SDK for integrated
 tracing with STOP Protocol.
 """
 
+import logging
 import os
 from contextvars import ContextVar
 from typing import Any, Optional
 
 from langfuse import Langfuse
+
+logger = logging.getLogger(__name__)
 
 
 class LangfuseClient:
@@ -35,23 +38,28 @@ class LangfuseClient:
         return cls._instance
 
     def __init__(self) -> None:
-        """Initialize Langfuse client."""
+        """Initialize Langfuse client using unified configuration."""
         if self._langfuse is not None:
             return
 
-        public_key = os.getenv("LANGFUSE_PUBLIC_KEY", "")
-        secret_key = os.getenv("LANGFUSE_SECRET_KEY", "")
-        host = os.getenv("LANGFUSE_HOST", "https://cloud.langfuse.com")
+        # Use unified configuration
+        from skill_observability_toolkit.config import get_config
 
-        if not public_key or not secret_key:
+        config = get_config()
+
+        if not config.is_langfuse_enabled():
+            logger.info(
+                "Langfuse not configured. Set LANGFUSE_PUBLIC_KEY and LANGFUSE_SECRET_KEY "
+                "environment variables, or disable tracing with ENABLE_TRACING=false"
+            )
             self._langfuse = None
             return
 
         self._langfuse = Langfuse(
-            public_key=public_key,
-            secret_key=secret_key,
-            host=host,
-            debug=False,
+            public_key=config.langfuse_public_key,
+            secret_key=config.langfuse_secret_key,
+            host=config.langfuse_host,
+            debug=config.log_level == "DEBUG",
         )
 
     @classmethod
@@ -105,7 +113,8 @@ class LangfuseClient:
 
             return trace_id
 
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to start trace: {e}")
             return None
 
     @classmethod
@@ -133,7 +142,8 @@ class LangfuseClient:
             # Langfuse SDK handles this automatically
             return True
 
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to end trace: {e}")
             return False
 
     @classmethod
@@ -161,22 +171,24 @@ class LangfuseClient:
             return False
 
         try:
-            # Use context variable to get current trace
-            from skill_observability_toolkit.stop.tracer import tracer_context
+            # Use core abstraction layer to avoid circular imports
+            from skill_observability_toolkit.core import get_trace_context
 
+            trace_context = get_trace_context()
             trace_id = cls.get_trace_id()
-            if not trace_id:
+            if not trace_id or trace_context is None:
                 return False
 
             # Get current span for scoring
-            current_span = tracer_context.get_current_span()
+            current_span = trace_context.get_current_span()
             if current_span:
                 # Apply score to span
                 current_span.score(name, value, data_type, comment)
 
             return True
 
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to end trace: {e}")
             return False
 
     @classmethod
@@ -201,15 +213,20 @@ class LangfuseClient:
         Returns:
             Span context if successful, None otherwise
         """
-        from skill_observability_toolkit.stop.tracer import tracer_context
+        from skill_observability_toolkit.core import get_trace_context
 
         try:
+            trace_context = get_trace_context()
+            if trace_context is None:
+                logger.warning("Trace context not initialized")
+                return None
+
             # Use current trace ID if not provided
             if not trace_id:
                 trace_id = cls.get_trace_id()
 
-            # Create span using tracer_context
-            span = tracer_context.start_span(
+            # Create span using trace context
+            span = trace_context.start_span(
                 name=name,
                 trace_id=trace_id,
                 parent_span_id=parent_span_id,
@@ -219,7 +236,8 @@ class LangfuseClient:
 
             return span
 
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to start span: {e}")
             return None
 
     @classmethod
@@ -241,11 +259,14 @@ class LangfuseClient:
             True if successful, False otherwise
         """
         try:
-            from skill_observability_toolkit.stop.tracer import tracer_context
-            tracer_context.end_span(span, status=status, output=output)
+            from skill_observability_toolkit.core import get_trace_context
+            trace_context = get_trace_context()
+            if trace_context:
+                trace_context.end_span(span, status=status, output=output)
             return True
 
-        except Exception:
+        except Exception as e:
+            logger.warning(f"Failed to end span: {e}")
             return False
 
     @classmethod

@@ -18,10 +18,12 @@ classifiers = [
 ]
 
 dependencies = [
-    "langfuse>=2.0.0",
-    "pyyaml>=6.0",
-    "click>=8.0.0",
-    "python-dotenv>=1.0.0",
+    "langfuse>=2.0.0,<3.0.0",
+    "pyyaml>=6.0,<7.0",
+    "click>=8.0.0,<9.0",
+    "python-dotenv>=1.0.0,<2.0",
+    "pydantic>=2.0.0,<3.0",
+    "pydantic-settings>=2.0.0,<3.0",
 ]
 
 [project.optional-dependencies]

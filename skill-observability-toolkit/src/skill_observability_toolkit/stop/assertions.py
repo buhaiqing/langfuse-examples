@@ -5,7 +5,7 @@ This module provides assertion checking capabilities for Skills,
 supporting both pre-execution and post-execution validations.
 """
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 
@@ -38,7 +38,7 @@ class AssertionResult:
     passed: bool
     assertion: str
     message: str = ""
-    details: dict[str, Any] = None
+    details: dict[str, Any] = field(default_factory=dict)
 
 
 @dataclass
@@ -405,7 +405,7 @@ class AssertionEngine:
         try:
             result = check_func(**params)
         except Exception as e:
-            raise AssertionExecutionError from e(f"Error executing check '{check_name}': {e}")
+            raise AssertionExecutionError(f"Error executing check '{check_name}': {e}") from e
 
         return result
 

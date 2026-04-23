@@ -236,6 +236,12 @@ def _capture_ci_environment() -> dict[str, Any]:
     Returns:
         Dictionary of CI environment variables
     """
+    # Sensitive environment variable patterns to filter
+    SENSITIVE_ENV_PATTERNS = [
+        "TOKEN", "SECRET", "KEY", "PASSWORD", "CREDENTIAL",
+        "AWS_ACCESS", "AWS_SECRET", "PRIVATE", "AUTH",
+    ]
+
     env_vars = {}
 
     # GitHub Actions
@@ -252,6 +258,8 @@ def _capture_ci_environment() -> dict[str, Any]:
             "ci_repository": os.getenv("GITHUB_REPOSITORY"),
             "ci_ref": os.getenv("GITHUB_REF"),
             "ci_sha": os.getenv("GITHUB_SHA"),
+            # Capture potentially sensitive vars for filtering
+            "GITHUB_TOKEN": os.getenv("GITHUB_TOKEN"),
         })
 
     # GitLab CI
@@ -267,6 +275,8 @@ def _capture_ci_environment() -> dict[str, Any]:
             "ci_sha": os.getenv("CI_COMMIT_SHA"),
             "ci_user_name": os.getenv("CI_USER_NAME"),
             "ci_user_email": os.getenv("CI_USER_EMAIL"),
+            # Capture potentially sensitive vars for filtering
+            "CI_JOB_TOKEN": os.getenv("CI_JOB_TOKEN"),
         })
 
     # Other CI systems
@@ -275,6 +285,20 @@ def _capture_ci_environment() -> dict[str, Any]:
             "ci": "other",
             "ci_trace_id": os.getenv("CI_BUILD_ID"),
         })
+
+    # Filter sensitive values (redact tokens, secrets, etc.)
+    for key, value in env_vars.items():
+        if value and any(pattern in key.upper() for pattern in SENSITIVE_ENV_PATTERNS):
+            env_vars[key] = "***REDACTED***"
+
+    # Additional check: filter values that look like secrets
+    for key, value in env_vars.items():
+        if value and isinstance(value, str):
+            # Redact if value looks like a token/secret (long random strings)
+            if len(value) > 20 and any(c in value for c in "_-"):
+                # Check if it's not a known safe pattern (like SHA, trace_id)
+                if not any(safe in key.lower() for safe in ["sha", "trace_id", "run_id", "job_id", "pipeline_id"]):
+                    env_vars[key] = "***REDACTED***"
 
     return env_vars
 
