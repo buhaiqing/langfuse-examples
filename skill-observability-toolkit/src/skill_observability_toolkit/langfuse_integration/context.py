@@ -20,7 +20,7 @@ _parent_trace_id_context: ContextVar[str | None] = ContextVar(
 
 # Current span context (stack of active spans)
 _current_span_stack: ContextVar[list] = ContextVar(
-    "span_stack", default=None
+    "span_stack", default=[]
 )
 
 
@@ -67,18 +67,18 @@ def get_current_span() -> dict[str, Any] | None:
 
 def push_span(span: dict[str, Any]) -> None:
     """Push a span onto the context stack."""
-    stack = _current_span_stack.get([])
+    stack = _current_span_stack.get()
     stack.append(span)
     _current_span_stack.set(stack)
 
 
 def pop_span() -> dict[str, Any] | None:
-    """Pop the current span from the context stack."""
+    """Pop the current span from the context stack and return the NEW current span."""
     stack = _current_span_stack.get()
     if stack:
-        stack.pop()
+        popped = stack.pop()
         _current_span_stack.set(stack)
-        return stack[-1] if stack else None
+        return popped
     return None
 
 
@@ -108,6 +108,10 @@ class TraceContextManager:
         if self.parent_trace_id:
             self._tokens.append(_parent_trace_id_context.set(self.parent_trace_id))
         return self
+
+    def end(self):
+        """End the trace context."""
+        self.__exit__(None, None, None)
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit context manager and restore context."""

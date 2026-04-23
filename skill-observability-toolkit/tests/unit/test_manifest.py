@@ -381,29 +381,32 @@ def valid_skill_path() -> str:
 
 @pytest.fixture
 def valid_skill_content() -> str:
-    """Content of valid skill manifest."""
-    return Path("tests/fixtures/valid_skill.yaml").read_text(encoding="utf-8")
-
-
-@pytest.fixture
-def duplicate_inputs_content() -> str:
-    """YAML content with duplicate input names."""
+    """Valid skill YAML content for testing."""
     return """
-name: duplicate-skill
-version: 1.0.0
-sop: |
-  Test
+sop: "1.0.0"
+name: api-expert-skill
+version: "1.0.0"
+description: API expert skill for testing
 
 inputs:
-  - name: data
+  - name: query
     type: string
-    description: First
-  - name: data
-    type: object
-    description: Second
+    description: User query
+    required: true
 
 outputs:
-  - name: result
+  - name: response
     type: string
-    description: Result
-    """
+    description: API response
+
+assertions:
+  pre:
+    - check: string_not_empty
+      message: Input query must not be empty
+  post:
+    - check: output_exists
+      message: Response must be generated
+
+trust_score:
+  enabled: true
+"""

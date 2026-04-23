@@ -42,13 +42,13 @@ def trace_skill_execution(
     def decorator(func: Callable) -> Callable:
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
+            from skill_observability_toolkit.langfuse_integration.context import TraceContextManager
+            
             client = LangfuseClient.get_instance()
             tracer = STOPTracer()
 
-            # Use provided trace_id or get from context
             current_trace_id = trace_id or get_trace_id()
 
-            # Start trace if not exists
             if not current_trace_id:
                 current_trace_id = tracer.start_trace(
                     name=f"skill:{skill_name}:{version}",
@@ -56,26 +56,24 @@ def trace_skill_execution(
                 set_trace_id(current_trace_id)
 
             start_time = time.time()
+            ctx_manager = TraceContextManager(trace_id=current_trace_id)
+            ctx_manager.__enter__()
 
             try:
-                # Create span for skill execution
                 span = tracer.start_span(
                     name=f"skill.execute:{skill_name}",
                     input_data={"args": str(args), "kwargs": str(kwargs)},
                 )
 
-                # Execute skill
                 result = func(*args, **kwargs)
 
                 duration_ms = (time.time() - start_time) * 1000
 
-                # End span
                 span.end(
                     output={"result": str(result)[:500]},
                     status="success",
                 )
 
-                # Score trace if Langfuse available
                 if client:
                     client.score_trace(
                         name="execution_time_ms",
@@ -93,29 +91,23 @@ def trace_skill_execution(
             except Exception as e:
                 duration_ms = (time.time() - start_time) * 1000
 
-                # End span with error
-                span.end(
-                    output={"error": str(e)},
-                    status="error",
-                )
+                if hasattr(span, 'end'):
+                    span.end(
+                        output={"error": str(e)},
+                        status="error",
+                    )
 
-                # Score trace with error
                 if client:
                     client.score_trace(
                         name="success",
                         value=0,
                         data_type="BOOLEAN",
                     )
-                    client.score_trace(
-                        name="error",
-                        value=str(e),
-                        data_type="CATEGORICAL",
-                    )
 
                 raise
 
             finally:
-                # End trace
+                ctx_manager.__exit__(None, None, None)
                 tracer.end_trace(status="success")
 
         return wrapper

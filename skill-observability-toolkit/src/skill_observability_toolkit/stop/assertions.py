@@ -33,12 +33,12 @@ class AssertionResult:
         passed: Whether the assertion passed
         assertion: The assertion that was executed
         message: Optional message explaining the result
-        details: Additional details about the assertion
+        details: Additional details about the assertion (None if not provided)
     """
     passed: bool
     assertion: str
     message: str = ""
-    details: dict[str, Any] = field(default_factory=dict)
+    details: dict[str, Any] | None = None
 
 
 @dataclass
