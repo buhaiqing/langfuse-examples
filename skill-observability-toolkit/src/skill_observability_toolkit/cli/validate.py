@@ -66,17 +66,18 @@ def validate_manifest(manifest_path: Path) -> tuple[bool, list[str]]:
     # Validate inputs
     if manifest.inputs:
         for i, input_field in enumerate(manifest.inputs):
-            if not input_field.name:
+            if not getattr(input_field, 'name', None):
                 errors.append(f"Input {i}: Missing 'name' field")
 
-            if not input_field.type:
+            if not getattr(input_field, 'type', None):
                 errors.append(f"Input {i}: Missing 'type' field")
 
-            # Check required inputs have constraints
-            if input_field.required and not input_field.constraints:
-                errors.append(
-                    f"Required input '{input_field.name}' should have constraints"
-                )
+            # Check required inputs have constraints (if constraints field exists)
+            if hasattr(input_field, 'required') and hasattr(input_field, 'constraints'):
+                if input_field.required and not input_field.constraints:
+                    errors.append(
+                        f"Required input '{input_field.name}' should have constraints"
+                    )
 
     # Validate outputs
     if manifest.outputs:

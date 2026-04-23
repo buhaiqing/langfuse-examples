@@ -239,8 +239,38 @@ class MetricsAggregator:
             if start_time <= dp.timestamp <= end_time
         ]
 
-        # TODO: Implement granularity-based aggregation
-        return filtered
+        # Granularity-based aggregation
+        granularity_seconds = {
+            TimeGranularity.SECOND: 1,
+            TimeGranularity.MINUTE: 60,
+            TimeGranularity.HOUR: 3600,
+            TimeGranularity.DAY: 86400,
+            TimeGranularity.WEEK: 604800,
+        }
+        
+        bucket_size = granularity_seconds.get(granularity, 60)
+        
+        # Group data points into buckets
+        buckets: dict[int, list] = {}
+        for dp in filtered:
+            bucket_key = int(dp.timestamp // bucket_size)
+            if bucket_key not in buckets:
+                buckets[bucket_key] = []
+            buckets[bucket_key].append(dp)
+        
+        # Aggregate each bucket
+        aggregated = []
+        for bucket_key, points in sorted(buckets.items()):
+            avg_value = sum(p.value for p in points) / len(points)
+            bucket_timestamp = bucket_key * bucket_size
+            
+            aggregated.append(TimeSeriesPoint(
+                timestamp=bucket_timestamp,
+                value=avg_value,
+                labels={"bucket_size": str(bucket_size), "points_count": str(len(points))},
+            ))
+        
+        return aggregated
 
     def generate_dashboard_data(
         self,

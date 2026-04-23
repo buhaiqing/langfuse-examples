@@ -54,7 +54,8 @@ class TestTracerContext:
         """Test getting trace ID without initialization raises error."""
         ctx = TracerContext()
 
-        with pytest.raises(TracerContextNotInitialized):
+        from skill_observability_toolkit.core.errors import TracingError
+        with pytest.raises(TracingError):
             ctx.get_current_trace_id()
 
     def test_push_pop_span(self):

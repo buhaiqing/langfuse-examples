@@ -143,8 +143,19 @@ class LangfuseClient:
             return True
 
         except Exception as e:
-            logger.warning(f"Failed to end trace: {e}")
-            return False
+            from skill_observability_toolkit.core.errors import TracingError, TracingErrorCode
+            
+            trace_id = cls.get_trace_id()
+            raise TracingError.from_exception(
+                code=TracingErrorCode.LANGFUSE_API_ERROR,
+                exception=e,
+                message=f"Failed to end trace '{trace_id or 'unknown'}'",
+                context={
+                    "trace_id": trace_id,
+                    "operation": "end_trace",
+                    "status": "error",
+                }
+            )
 
     @classmethod
     def score_trace(
@@ -173,23 +184,66 @@ class LangfuseClient:
         try:
             # Use core abstraction layer to avoid circular imports
             from skill_observability_toolkit.core import get_trace_context
+            from skill_observability_toolkit.core.errors import TracingError, TracingErrorCode
 
             trace_context = get_trace_context()
             trace_id = cls.get_trace_id()
-            if not trace_id or trace_context is None:
-                return False
+            
+            if not trace_id:
+                raise TracingError(
+                    code=TracingErrorCode.TRACE_ID_MISSING,
+                    message="Cannot score trace without trace ID",
+                    context={
+                        "operation": "score_trace",
+                        "score_name": name,
+                        "score_value": value,
+                        "score_type": data_type,
+                    }
+                )
+            
+            if trace_context is None:
+                raise TracingError(
+                    code=TracingErrorCode.TRACE_CONTEXT_NOT_INITIALIZED,
+                    message="Trace context not initialized",
+                    context={"operation": "score_trace"},
+                )
 
             # Get current span for scoring
             current_span = trace_context.get_current_span()
-            if current_span:
-                # Apply score to span
-                current_span.score(name, value, data_type, comment)
+            if not current_span:
+                raise TracingError(
+                    code=TracingErrorCode.SPAN_CONTEXT_CORRUPTED,
+                    message="No active span found for scoring",
+                    context={
+                        "trace_id": trace_id,
+                        "operation": "score_trace",
+                        "score_name": name,
+                    },
+                )
+            
+            # Apply score to span
+            current_span.score(name, value, data_type, comment)
 
             return True
 
+        except TracingError:
+            raise  # Re-raise structured errors
         except Exception as e:
-            logger.warning(f"Failed to end trace: {e}")
-            return False
+            from skill_observability_toolkit.core.errors import TracingError, TracingErrorCode
+            
+            trace_id = cls.get_trace_id()
+            raise TracingError.from_exception(
+                code=TracingErrorCode.SCORE_VALIDATION_FAILED,
+                exception=e,
+                message=f"Failed to score trace '{name}'",
+                context={
+                    "trace_id": trace_id,
+                    "operation": "score_trace",
+                    "score_name": name,
+                    "score_value": value,
+                    "score_type": data_type,
+                }
+            )
 
     @classmethod
     def start_span(
@@ -213,17 +267,34 @@ class LangfuseClient:
         Returns:
             Span context if successful, None otherwise
         """
-        from skill_observability_toolkit.core import get_trace_context
-
         try:
+            from skill_observability_toolkit.core import get_trace_context
+            from skill_observability_toolkit.core.errors import TracingError, TracingErrorCode
+            
             trace_context = get_trace_context()
             if trace_context is None:
-                logger.warning("Trace context not initialized")
-                return None
+                raise TracingError(
+                    code=TracingErrorCode.TRACE_CONTEXT_NOT_INITIALIZED,
+                    message="Trace context not initialized, cannot start span",
+                    context={
+                        "span_name": name,
+                        "operation": "start_span",
+                    },
+                )
 
             # Use current trace ID if not provided
             if not trace_id:
                 trace_id = cls.get_trace_id()
+                if not trace_id:
+                    raise TracingError(
+                        code=TracingErrorCode.TRACE_ID_MISSING,
+                        message="No trace ID provided and no active trace in context",
+                        context={
+                            "span_name": name,
+                            "operation": "start_span",
+                            "trace_id_provided": trace_id is not None,
+                        },
+                    )
 
             # Create span using trace context
             span = trace_context.start_span(
@@ -236,7 +307,20 @@ class LangfuseClient:
 
             return span
 
+        except TracingError:
+            raise  # Re-raise structured errors
         except Exception as e:
+            raise TracingError.from_exception(
+                code=TracingErrorCode.SPAN_PROPAGATION_FAILED,
+                exception=e,
+                message=f"Failed to start span '{name}'",
+                context={
+                    "span_name": name,
+                    "operation": "start_span",
+                    "trace_id": trace_id,
+                    "parent_span_id": parent_span_id,
+                },
+            )
             logger.warning(f"Failed to start span: {e}")
             return None
 

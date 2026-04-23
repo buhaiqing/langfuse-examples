@@ -108,6 +108,8 @@ def set_ci_context_from_env() -> dict[str, Any]:
             set_ci_trace_id(run_id)
             context["trace_id"] = run_id
 
+        context["ci"] = "github_actions"
+
         workflow = os.getenv("GITHUB_WORKFLOW")
         if workflow:
             context["workflow"] = workflow
@@ -122,6 +124,8 @@ def set_ci_context_from_env() -> dict[str, Any]:
         if pipeline_id:
             set_ci_trace_id(pipeline_id)
             context["trace_id"] = pipeline_id
+
+        context["ci"] = "gitlab_ci"
 
         stage = os.getenv("CI_JOB_STAGE")
         if stage:

@@ -180,6 +180,8 @@ class LabelManager:
         self._schemas: dict[str, LabelSchema] = self.DEFAULT_SCHEMAS.copy()
         self._labels: dict[str, UnifiedLabel] = {}
         self._validation_errors: list[str] = []
+        self._trace_labels: dict[str, dict[str, str]] = {}
+        self._span_labels: dict[str, dict[str, str]] = {}
 
     def register_schema(self, schema: LabelSchema) -> "LabelManager":
         """
@@ -329,7 +331,20 @@ class LabelManager:
         Returns:
             True if applied successfully
         """
-        # TODO: Implement trace label application
+        if not labels:
+            return True
+        
+        # Validate labels
+        for key, value in labels.items():
+            schema = self._schemas.get(key)
+            if schema and not schema.validate(value):
+                self._validation_errors.append(f"Invalid label '{key}': '{value}'")
+                return False
+        
+        # Store trace labels (integration point for Langfuse/MCP)
+        # In production, this would call Langfuse SDK to update trace metadata
+        self._trace_labels[trace_id] = labels.copy()
+        
         return True
 
     def apply_to_span(self, trace_id: str, span_id: str, labels: dict[str, str] | None = None) -> bool:
@@ -344,7 +359,21 @@ class LabelManager:
         Returns:
             True if applied successfully
         """
-        # TODO: Implement span label application
+        if not labels:
+            return True
+        
+        # Validate labels
+        for key, value in labels.items():
+            schema = self._schemas.get(key)
+            if schema and not schema.validate(value):
+                self._validation_errors.append(f"Invalid label '{key}': '{value}'")
+                return False
+        
+        # Store span labels (integration point for Langfuse/MCP)
+        # Key format: trace_id:span_id
+        span_key = f"{trace_id}:{span_id}"
+        self._span_labels[span_key] = labels.copy()
+        
         return True
 
     def get_validation_errors(self) -> list[str]:

@@ -42,7 +42,12 @@ class TracerContext:
     def __init__(self):
         """Initialize the tracer context."""
         self.ctx_trace_id: ContextVar[str | None] = ContextVar("trace_id", default=None)
-        self.ctx_span_stack: ContextVar[list[dict[str, Any]] | None] = ContextVar("span_stack", default=None)
+        self.ctx_span_stack: ContextVar[list[dict[str, Any]]] = ContextVar("span_stack", default=[])
+
+    def _ensure_stack_initialized(self) -> None:
+        """Ensure span stack is initialized to empty list."""
+        if self.ctx_span_stack.get() is None:
+            self.ctx_span_stack.set([])
 
     def get_current_trace_id(self) -> str:
         """
@@ -52,11 +57,17 @@ class TracerContext:
             Current trace_id
 
         Raises:
-            TracerContextNotInitialized: If no trace context exists
+            TracingError: If no trace context exists
         """
+        from skill_observability_toolkit.core.errors import TracingError, TracingErrorCode
+        
         trace_id = self.ctx_trace_id.get()
         if trace_id is None:
-            raise TracerContextNotInitialized("No active trace context. Call start_trace() first.")
+            raise TracingError(
+                code=TracingErrorCode.TRACE_CONTEXT_NOT_INITIALIZED,
+                message="No active trace context. Call start_trace() first.",
+                context={"operation": "get_current_trace_id"},
+            )
         return trace_id
 
     def get_current_span(self) -> dict[str, Any] | None:
@@ -79,8 +90,6 @@ class TracerContext:
             span: Span dictionary to push
         """
         stack = self.ctx_span_stack.get()
-        if stack is None:
-            stack = []
         stack.append(span)
         self.ctx_span_stack.set(stack)
 
@@ -112,7 +121,7 @@ class TracerContext:
             trace_id = f"skill_trace_{uuid.uuid4().hex[:12]}"
 
         self.ctx_trace_id.set(trace_id)
-        self.ctx_span_stack.set(None)
+        self.ctx_span_stack.set([])
 
         return trace_id
 
@@ -121,6 +130,7 @@ class TracerContext:
         End current trace context and clear context vars.
         """
         self.ctx_trace_id.set(None)
+        self.ctx_span_stack.set([])
         self.ctx_span_stack.set(None)
 
 

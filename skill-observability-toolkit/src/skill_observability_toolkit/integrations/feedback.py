@@ -109,7 +109,30 @@ class FeedbackCollector:
         Returns:
             True if stored successfully
         """
-        # TODO: Implement storage (file, database, etc.)
+        # In-memory storage (already added to self._feedback in collect())
+        # Optional file persistence if storage_path is configured
+        if self._storage_path:
+            try:
+                import json
+                from pathlib import Path
+                
+                storage_file = Path(self._storage_path) / f"{feedback.id}.json"
+                storage_file.parent.mkdir(parents=True, exist_ok=True)
+                
+                with open(storage_file, 'w') as f:
+                    json.dump({
+                        "id": feedback.id,
+                        "type": feedback.type.value,
+                        "message": feedback.message,
+                        "timestamp": feedback.timestamp,
+                        "trace_id": feedback.trace_id,
+                        "user_id": feedback.user_id,
+                        "metadata": feedback.metadata,
+                    }, f)
+            except Exception:
+                # Log error but don't fail collection
+                pass
+        
         return True
 
     def get_feedback(

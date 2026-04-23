@@ -35,12 +35,14 @@ class SkillInput:
         description: Human-readable description
         required: Whether this input is required (default: True)
         default: Default value if not provided
+        constraints: Optional constraints (enum, min/max, pattern)
     """
     name: str
     type: str
     description: str
     required: bool = True
     default: Any = None
+    constraints: dict[str, Any] = field(default_factory=dict)
 
     def to_dict(self) -> dict[str, Any]:
         """Convert to dictionary."""
@@ -50,6 +52,7 @@ class SkillInput:
             "description": self.description,
             "required": self.required,
             "default": self.default,
+            "constraints": self.constraints,
         }
 
 
@@ -236,6 +239,26 @@ class ManifestParser:
         self.errors: list[str] = []
         self.warnings: list[str] = []
 
+    def load(self, skill_yaml_path: str | None = None) -> SkillManifest:
+        """
+        Load and parse skill manifest from file.
+
+        Alias for parse() method for convenience.
+
+        Args:
+            skill_yaml_path: Path to skill.yaml file. If None, uses self.skill_yaml_path.
+
+        Returns:
+            Parsed SkillManifest object
+
+        Raises:
+            ManifestParseError: If parsing fails
+            ManifestValidationError: If validation fails
+        """
+        if skill_yaml_path:
+            self.skill_yaml_path = skill_yaml_path
+        return self.parse()
+
     def parse(self, content: str | None = None) -> SkillManifest:
         """
         Parse the skill manifest from content or file.
@@ -263,7 +286,7 @@ class ManifestParser:
         try:
             data = yaml.safe_load(content)
         except yaml.YAMLError as e:
-            raise ManifestParseError from e(f"Failed to parse YAML: {e}")
+            raise ManifestParseError(f"Failed to parse YAML: {e}") from e
 
         # Validate data is a dict
         if not isinstance(data, dict):
@@ -519,12 +542,39 @@ class ManifestParser:
             List of assertion results with 'check', 'passed', 'message' fields
         """
         results = []
-
-        # TODO: Implement actual trace file parsing when T1.3 is complete
-        # For now, return empty list
-        self.warnings.append(
-            "Assertion result retrieval from traces not yet implemented "
-            "(requires Task 1.3: STOP Tracer)"
-        )
-
+        
+        try:
+            from pathlib import Path
+            trace_file = Path(trace_path)
+            
+            if not trace_file.exists():
+                self.warnings.append(f"Trace file not found: {trace_path}")
+                return results
+            
+            import json
+            with open(trace_file) as f:
+                for line_num, line in enumerate(f, 1):
+                    line = line.strip()
+                    if not line:
+                        continue
+                    
+                    try:
+                        entry = json.loads(line)
+                        
+                        if entry.get("type") == "assertion":
+                            results.append({
+                                "check": entry.get("check", ""),
+                                "passed": entry.get("passed", False),
+                                "message": entry.get("message", ""),
+                                "details": entry.get("details", {}),
+                                "timestamp": entry.get("timestamp"),
+                            })
+                    except json.JSONDecodeError as e:
+                        self.warnings.append(
+                            f"Failed to parse line {line_num} in {trace_path}: {e}"
+                        )
+                        
+        except Exception as e:
+            self.warnings.append(f"Error reading trace file {trace_path}: {e}")
+        
         return results
