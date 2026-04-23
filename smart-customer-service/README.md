@@ -204,7 +204,7 @@ print(f"Escalated: {response['escalated']}")
 - **LangChain**: LLM应用开发框架
 - **ChromaDB**: 向量数据库(RAG)
 - **OpenAI GPT**: 大语言模型
-- **Python 3.9+**: 编程语言
+- **Python 3.10+**: 编程语言
 
 ## 📈 最佳实践
 
