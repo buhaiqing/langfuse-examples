@@ -230,6 +230,124 @@ CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
 
 ---
 
+## 开发反思与预防措施（MUST FOLLOW）
+
+> 基于 skill-observability-toolkit 开发过程中的实战教训总结
+
+### 开发前检查清单（MUST DO）
+
+```bash
+# 1. Git状态检查（恢复删除的测试文件）
+git status --porcelain | grep "^D" && git restore --source=HEAD tests/
+
+# 2. API契约验证（确保测试期望与实现匹配）
+grep -r "def load\|def parse" src/ | wc -l  # 方法数量确认
+grep -r "class.*Input\|class.*Output" tests/ | grep constraints  # 属性完整性
+
+# 3. TODO清理（commit前必须处理）
+grep -r "TODO:" src/ | wc -l  # 应为0或有明确优先级标注
+
+# 4. Coverage基线检查
+pytest --cov=src --cov-report=term-missing | grep "TOTAL" | awk '{print $4}'  # >80%
+```
+
+### 关键预防措施
+
+#### 1. API契约先行定义
+**问题根因**: 测试调用`ManifestParser.load()`，但实现只有`parse()`
+
+**预防措施**:
+- 实现前先写测试验证API契约
+- dataclass新增字段后立即更新`to_dict()`和相关验证逻辑
+- 异常类型变更后立即更新测试期望
+
+```python
+# 正确流程
+# Step 1: 定义API契约
+class ManifestParser:
+    def load(self, path: str) -> SkillManifest: ...
+    def parse(self, content: str) -> SkillManifest: ...
+
+# Step 2: 测试验证契约
+def test_api_contract():
+    parser = ManifestParser()
+    assert hasattr(parser, 'load')
+    assert hasattr(parser, 'parse')
+
+# Step 3: 实现契约
+def load(self, path: str) -> SkillManifest:
+    return self.parse(self._read_file(path))
+```
+
+#### 2. 异常处理规范
+**问题根因**: `raise ManifestParseError from e(...)` 导致TypeError
+
+**预防措施**:
+```python
+# 正确异常链语法
+try:
+    data = yaml.safe_load(content)
+except yaml.YAMLError as e:
+    raise ManifestParseError(f"Failed to parse YAML: {e}") from e
+    # NOT: raise ManifestParseError from e(...)  # 错误
+```
+
+#### 3. ContextVar类型一致性
+**问题根因**: 类型注解`list | None`与默认值`None`不匹配，测试期望`[]`
+
+**预防措施**:
+```python
+# 正确定义
+ctx_span_stack: ContextVar[list] = ContextVar("span_stack", default=[])
+
+# 重置保持一致性
+def end_trace(self):
+    self.ctx_trace_id.set(None)
+    self.ctx_span_stack.set([])  # NOT set(None)
+```
+
+#### 4. 测试数据集中管理
+**问题根因**: fixture分散，git恢复不及时
+
+**预防措施**:
+- 所有fixture统一在`tests/conftest.py`
+- 开发前先检查`git status`恢复删除文件
+- fixture添加docstring说明用途
+
+#### 5. 委托失败降级策略
+**问题根因**: explore/librarian agents因证书错误失败
+
+**预防措施**:
+- agent失败后立即切换到直接工具执行
+- 网络问题时使用`grep/read`替代`explore`
+- 检查`status: error`立即fallback
+
+#### 6. TODO即时清理
+**问题根因**: TODO累积影响代码质量
+
+**预防措施**:
+- TODO仅在开发过程中短暂存在，commit前必须清理
+- TODO必须标注优先级：`# TODO: [MEDIUM] description - date`
+- 每周执行`grep TODO`检查累积情况
+
+### 开发交付检查（MUST DO）
+
+```bash
+# 完整验证流程
+pytest tests/ -v --tb=short              # 全部测试通过
+pytest --cov=src --cov-fail-under=80     # 覆盖率>80%
+grep -r "TODO:" src/ | wc -l             # 应为0
+ruff check src/ tests/                   # Linter检查
+black --check src/ tests/                # 格式检查
+mypy src/                                # 类型检查
+```
+
+### 详细反思文档
+
+完整的问题分析、根因推导和预防措施见: `docs/LESSONS_LEARNED.md`
+
+---
+
 ## 参考资料
 
 - [Langfuse Python SDK](https://langfuse.com/docs/sdk/python)
@@ -237,9 +355,10 @@ CMD ["uvicorn", "api.main:app", "--host", "0.0.0.0", "--port", "8000"]
 - [Langfuse 文档](https://langfuse.com/docs)
 - [Langfuse 示例仓库](https://github.com/langfuse/langfuse-examples)
 - 项目特定开发规则: `.lingma/rules/开发规范.md`
+- 开发反思文档: `docs/LESSONS_LEARNED.md`
 
 ---
 
-**最后更新**: 2026-04-13  
+**最后更新**: 2026-04-24  
 **维护者**: 平台团队  
-**版本**: 1.0.0
+**版本**: 1.1.0
