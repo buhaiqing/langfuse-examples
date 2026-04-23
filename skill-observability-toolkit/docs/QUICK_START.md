@@ -1,12 +1,31 @@
+
 # Quick Start Guide
 
-> **Time**: 10-15 min
+> **Time**: 10-15 minutes
 > **Level**: Beginner
 
-## Installation
+## Step 1: Installation
 
-1. Clone repo
-2. Install deps: pip install -e .[dev]
-3. Configure .env
+Clone repository and install:
+```bash
+git clone https://github.com/langfuse/langfuse-examples.git
+cd skill-observability-toolkit
+pip install -e .[dev]
+```
 
-See full guide in README.md
+Setup Langfuse credentials:
+```bash
+## Step 2: Configure
+
+cp .env.example .env
+```
+Add your keys: LANGFUSE_PUBLIC_KEY, LANGFUSE_SECRET_KEY
+
+## Step 3: Run Example
+
+```bash
+cd examples/basic-skill
+python src/main.py
+```
+
+See README.md for full details.
