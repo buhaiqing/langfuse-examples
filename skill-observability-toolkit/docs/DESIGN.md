@@ -1296,6 +1296,403 @@ def validate(manifest_path):
 
 ---
 
+### 3.5 无缝集成模块（新增）
+
+#### 3.5.1 observe 命令 - 一键观测化
+
+**目标**: 对现有传统 Agent Skill 无需修改代码即可添加可观测能力
+
+```python
+# src/cli/observe.py
+import ast
+import sys
+from pathlib import Path
+from typing import Optional
+
+import typer
+
+app = typer.Typer(name="observe", help="无缝给传统 Agent Skill 加上可观测能力")
+
+
+@app.command()
+def main(
+    path: str = typer.Option(..., "--path", "-p", help="现有 Skill 路径"),
+    entry_point: Optional[str] = typer.Option(None, "--entry-point", "-e", help="入口函数名"),
+    output_dir: Optional[str] = typer.Option(None, "--output-dir", "-o", help="输出目录"),
+    dry_run: bool = typer.Option(False, "--dry-run", help="仅分析，不修改"),
+    force: bool = typer.Option(False, "--force", "-f", help="覆盖已有文件"),
+    langfuse: bool = typer.Option(False, "--langfuse", "-l", help="启用 Langfuse 追踪"),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="详细输出"),
+):
+    """
+    一键观测化现有 Agent Skill
+    
+    示例:
+        stop observe ./my-existing-skill
+        stop observe ./my-existing-skill --langfuse --dry-run
+    """
+    skill_path = Path(path)
+    if not skill_path.exists():
+        typer.echo(f"❌ Skill 路径不存在: {path}", err=True)
+        raise typer.Exit(1)
+    
+    analyzer = SkillCodeAnalyzer()
+    observer = SkillObserver(langfuse_enabled=langfuse, verbose=verbose)
+    
+    if verbose:
+        typer.echo(f"🔍 分析 Skill: {skill_path}")
+    
+    analysis_result = analyzer.analyze(skill_path, entry_point=entry_point)
+    
+    if verbose:
+        typer.echo(f"   发现入口函数: {analysis_result.entry_point}")
+        typer.echo(f"   输入参数: {len(analysis_result.inputs)} 个")
+        typer.echo(f"   输出参数: {len(analysis_result.outputs)} 个")
+    
+    if dry_run:
+        typer.echo("\n📝 Dry Run - 以下是建议的修改:")
+        typer.echo(analysis_result.to_text())
+        return
+    
+    observer.instrument(
+        skill_path=skill_path,
+        analysis=analysis_result,
+        output_dir=output_dir,
+        force=force,
+    )
+    
+    typer.echo(f"\n✅ 观测化完成!")
+    typer.echo(f"   生成文件:")
+    typer.echo(f"   - skill.yaml (Manifest)")
+    typer.echo(f"   - {analysis_result.entry_point}_instrumented.py (追踪版本)")
+    if langfuse:
+        typer.echo(f"   - .env.example (Langfuse 配置)")
+
+
+class SkillAnalysisResult:
+    """代码分析结果"""
+    
+    def __init__(
+        self,
+        entry_point: str,
+        inputs: list,
+        outputs: list,
+        description: str,
+        tools_used: list,
+        file_path: str,
+    ):
+        self.entry_point = entry_point
+        self.inputs = inputs
+        self.outputs = outputs
+        self.description = description
+        self.tools_used = tools_used
+        self.file_path = file_path
+    
+    def to_text(self) -> str:
+        return f"""
+Entry Point: {self.entry_point}
+Description: {self.description}
+Inputs: {self.inputs}
+Outputs: {self.outputs}
+Tools Used: {self.tools_used}
+Source: {self.file_path}
+"""
+    
+    def to_skill_yaml(self) -> dict:
+        return {
+            "sop": "1.0.0",
+            "name": self._derive_name(),
+            "version": "0.1.0",
+            "description": self.description,
+            "inputs": self.inputs,
+            "outputs": self.outputs,
+            "tools_used": self.tools_used,
+            "observability": {
+                "level": "L2",
+                "langfuse_integration": True,
+            },
+        }
+    
+    def _derive_name(self) -> str:
+        return Path(self.file_path).stem.replace("_", "-")
+
+
+class SkillCodeAnalyzer:
+    """Skill 代码分析器 - 使用 AST"""
+    
+    def analyze(self, skill_path: Path, entry_point: Optional[str] = None) -> SkillAnalysisResult:
+        """分析 Skill 代码"""
+        py_files = list(skill_path.rglob("*.py"))
+        if not py_files:
+            raise ValueError(f"未找到 Python 文件: {skill_path}")
+        
+        main_file = self._find_main_file(py_files, entry_point)
+        
+        with open(main_file, "r", encoding="utf-8") as f:
+            source = f.read()
+        
+        tree = ast.parse(source)
+        
+        target_func = self._find_entry_function(tree, entry_point)
+        inputs = self._extract_inputs(target_func)
+        outputs = self._extract_outputs(target_func)
+        description = self._extract_description(target_func)
+        tools = self._detect_tools(tree)
+        
+        return SkillAnalysisResult(
+            entry_point=target_func.name,
+            inputs=inputs,
+            outputs=outputs,
+            description=description,
+            tools_used=tools,
+            file_path=str(main_file),
+        )
+    
+    def _find_main_file(self, py_files: list, entry_point: Optional[str]) -> Path:
+        """查找主文件"""
+        if len(py_files) == 1:
+            return py_files[0]
+        
+        candidates = [f for f in py_files if f.name in ("main.py", "skill.py", "__main__.py")]
+        if candidates:
+            return candidates[0]
+        
+        return py_files[0]
+    
+    def _find_entry_function(self, tree: ast.AST, entry_point: Optional[str]) -> ast.FunctionDef:
+        """查找入口函数"""
+        for node in ast.walk(tree):
+            if isinstance(node, ast.FunctionDef):
+                if entry_point and node.name == entry_point:
+                    return node
+                if node.name in ("execute", "run", "main", "skill"):
+                    return node
+                if node.name.startswith("handle_") or node.name.startswith("process_"):
+                    return node
+        
+        for node in tree.body:
+            if isinstance(node, ast.FunctionDef):
+                return node
+        
+        raise ValueError(f"未找到入口函数: {entry_point}")
+    
+    def _extract_inputs(self, func: ast.FunctionDef) -> list:
+        """提取输入参数"""
+        inputs = []
+        for arg in func.args.args:
+            type_hint = ""
+            if arg.annotation:
+                type_hint = self._get_type_name(arg.annotation)
+            
+            inputs.append({
+                "name": arg.arg,
+                "type": self._infer_type(type_hint),
+                "required": True,
+                "description": f"{arg.arg} parameter",
+            })
+        
+        return inputs
+    
+    def _extract_outputs(self, func: ast.FunctionDef) -> list:
+        """提取输出信息"""
+        if func.returns:
+            return_type = self._get_type_name(func.returns)
+        else:
+            return_type = "dict"
+        
+        return [{
+            "name": "result",
+            "type": return_type,
+            "description": "执行结果",
+            "guaranteed": True,
+        }]
+    
+    def _extract_description(self, func: ast.FunctionDef) -> str:
+        """提取描述"""
+        if ast.get_docstring(func):
+            return ast.get_docstring(func).split("\n")[0]
+        return f"{func.name} skill"
+    
+    def _detect_tools(self, tree: ast.AST) -> list:
+        """检测使用的工具"""
+        tools = set()
+        tool_patterns = {
+            "read_file": ["open", "read"],
+            "web_search": ["requests", "urllib", "httpx"],
+            "code_execution": ["exec", "eval", "subprocess"],
+            "database": ["sql", "query"],
+        }
+        
+        source = ast.unparse(tree)
+        for tool, patterns in tool_patterns.items():
+            if any(p in source for p in patterns):
+                tools.add(tool)
+        
+        return list(tools) if tools else ["unknown"]
+    
+    def _get_type_name(self, node: ast.AST) -> str:
+        """获取类型名称"""
+        if isinstance(node, ast.Name):
+            return node.id
+        elif isinstance(node, ast.Constant):
+            return type(node.value).__name__
+        elif isinstance(node, ast.Subscript):
+            return f"{self._get_type_name(node.value)}[{self._get_type_name(node.slice)}]"
+        elif isinstance(node, ast.BinOp):
+            return "str"
+        return "any"
+    
+    def _infer_type(self, type_hint: str) -> str:
+        """推断类型"""
+        type_map = {
+            "str": "string",
+            "int": "integer",
+            "float": "number",
+            "bool": "boolean",
+            "list": "array",
+            "dict": "json",
+            "Path": "file_path",
+        }
+        return type_map.get(type_hint.lower(), "string")
+
+
+class SkillObserver:
+    """Skill 观测化器"""
+    
+    def __init__(self, langfuse_enabled: bool = False, verbose: bool = False):
+        self.langfuse_enabled = langfuse_enabled
+        self.verbose = verbose
+    
+    def instrument(
+        self,
+        skill_path: Path,
+        analysis: SkillAnalysisResult,
+        output_dir: Optional[str],
+        force: bool = False,
+    ):
+        """注入追踪代码"""
+        import yaml
+        
+        output = Path(output_dir) if output_dir else skill_path
+        
+        skill_yaml_path = output / "skill.yaml"
+        if skill_yaml_path.exists() and not force:
+            typer.echo(f"⚠️ skill.yaml 已存在，使用 --force 覆盖", err=True)
+            return
+        
+        skill_yaml_content = yaml.dump(analysis.to_skill_yaml(), allow_unicode=True, default_flow_style=False)
+        skill_yaml_path.write_text(skill_yaml_content, encoding="utf-8")
+        
+        if self.verbose:
+            typer.echo(f"   生成: {skill_yaml_path}")
+        
+        instrumented_path = output / f"{analysis.entry_point}_instrumented.py"
+        self._create_instrumented_file(
+            original_path=analysis.file_path,
+            output_path=instrumented_path,
+            entry_point=analysis.entry_point,
+            force=force,
+        )
+        
+        if self.langfuse_enabled:
+            env_example = output / ".env.example"
+            env_example.write_text(self._get_env_template(), encoding="utf-8")
+            if self.verbose:
+                typer.echo(f"   生成: {env_example}")
+    
+    def _create_instrumented_file(
+        self,
+        original_path: str,
+        output_path: Path,
+        entry_point: str,
+        force: bool = False,
+    ):
+        """创建带追踪的版本"""
+        source = Path(original_path).read_text(encoding="utf-8")
+        
+        decorator = '''from skill_observability_toolkit import trace_skill_execution
+
+'''
+        
+        if f"@trace_skill_execution" not in source:
+            tree = ast.parse(source)
+            for node in ast.walk(tree):
+                if isinstance(node, ast.FunctionDef) and node.name == entry_point:
+                    node.decorator_list.insert(0, ast.Name(id="trace_skill_execution"))
+            
+            instrumented_source = ast.unparse(tree)
+            output_path.write_text(instrumented_source, encoding="utf-8")
+        else:
+            if not force:
+                typer.echo(f"⚠️ {original_path} 已有追踪装饰器")
+            output_path.write_text(source, encoding="utf-8")
+    
+    def _get_env_template(self) -> str:
+        return '''# Langfuse Configuration
+LANGFUSE_PUBLIC_KEY=pk-lf-xxxxxxxxxxxxxxxxxxxx
+LANGFUSE_SECRET_KEY=sk-lf-xxxxxxxxxxxxxxxxxxxx
+LANGFUSE_HOST=https://cloud.langfuse.com
+'''
+```
+
+#### 3.5.2 核心设计原则
+
+| 原则 | 说明 |
+|------|------|
+| **零侵入** | 不修改原始代码，只生成新文件 |
+| **AST 分析** | 使用 Python AST 而非正则表达式，保证准确性 |
+| **Dry Run** | 先分析后修改，用户确认后再行动 |
+| **幂等性** | 支持 --force 覆盖，可重复执行 |
+| **可逆性** | 保留原文件，生成 `_instrumented.py` 新文件 |
+
+#### 3.5.3 工作流程
+
+```
+stop observe ./existing-skill
+│
+├── 1. 扫描代码
+│   └── 查找 *.py 文件，定位入口函数
+│
+├── 2. AST 分析
+│   ├── 提取函数签名 (name, parameters, types)
+│   ├── 提取 docstring (description)
+│   └── 检测工具调用 (open, requests, etc.)
+│
+├── 3. 生成 skill.yaml
+│   └── 基于分析结果生成 STOP Manifest
+│
+├── 4. 注入追踪装饰器
+│   └── 生成 {entry_point}_instrumented.py
+│
+└── 5. 输出结果
+    ├── skill.yaml
+    ├── {entry_point}_instrumented.py
+    └── .env.example (可选)
+```
+
+#### 3.5.4 技术规格
+
+| 规格 | 值 |
+|------|-----|
+| **支持 Python 版本** | 3.10+ |
+| **AST 库** | 标准库 `ast` |
+| **代码修改** | `ast.unparse` (Python 3.9+) |
+| **输入格式** | YAML |
+| **输出格式** | YAML, Python |
+| **依赖** | typer, pyyaml |
+
+#### 3.5.5 与 init 命令对比
+
+| 功能 | `stop init` | `stop observe` |
+|------|-------------|----------------|
+| **用途** | 创建新项目 | 改造现有项目 |
+| **输入** | 交互式问答 | 现有 Skill 路径 |
+| **代码** | 生成空壳代码 | 分析现有代码 |
+| **侵入性** | 完全新建 | 零侵入 |
+| **目标用户** | 新项目起点 | 存量项目改造 |
+
+---
+
 ## 4. 数据流设计
 
 ### 4.1 端到端 Trace 数据流
@@ -1457,8 +1854,11 @@ from skill_observability_toolkit.ci import (
 ### 5.2 CLI API
 
 ```bash
-# 初始化
+# 初始化新项目
 stop init [--name NAME] [--version VERSION] [--description DESC] [--level LEVEL]
+
+# 观测化现有项目（新增）
+stop observe <path> [--entry-point NAME] [--dry-run] [--force] [--langfuse] [--verbose]
 
 # 验证
 stop validate <skill.yaml>
@@ -1466,10 +1866,13 @@ stop validate <skill.yaml>
 # 执行 (带追踪)
 stop run [--trace] [--trace-id ID] <skill_path>
 
+# 比较两个 Skill（仅计划）
+stop compare <skill_a> <skill_b>
+
 # 查看追踪
 stop trace <trace_id>
 
-# 生成报告
+# 生成报告（部分实现）
 stop report [--last N] [--format json|html]
 
 # 启动本地仪表板
@@ -1594,6 +1997,24 @@ skill-observability-toolkit/
 
 ## 7. 实施计划
 
+### 7.0 核心优先级调整（新增）
+
+> **目标**: 实现"无缝给传统 Agent Skill 加上可观测能力"
+
+**新增 Phase 0**: 一键观测化 (1 周)
+- [x] ~~Task 0.1: 设计 stop observe 命令~~ (已完成设计)
+- [ ] Task 0.2: 实现 SkillCodeAnalyzer (AST 代码分析)
+- [ ] Task 0.3: 实现 SkillObserver (追踪代码注入)
+- [ ] Task 0.4: 实现自动 skill.yaml 生成
+- [ ] Task 0.5: 单元测试
+
+**交付物**:
+- `stop observe` 命令
+- 自动 skill.yaml 生成
+- 零侵入观测化方案
+
+---
+
 ### 7.1 Phase 1: Skill 层基础 (2-3 周)
 
 **目标**: 实现 STOP Protocol L0-L2 + Langfuse 追踪 SDK
@@ -1677,13 +2098,13 @@ skill-observability-toolkit/
   - 步骤时长追踪
   - 瓶颈识别
 
-- [ ] Task 2.5: 报告生成
-  - HTML 报告
-  - JSON 输出
+- [x] Task 2.5: 报告生成
+  - [x] JSON 输出
+  - [ ] HTML 报告 (仅计划，未实现)
 
-- [ ] Task 2.6: CLI report 命令
-  - 报告查看
-  - 历史对比
+- [x] Task 2.6: CLI report 命令
+  - [x] 报告查看
+  - [ ] 历史对比 (未实现)
 
 **Week 6: 示例和测试**
 - [ ] Task 2.7: CI 集成示例
@@ -1697,7 +2118,7 @@ skill-observability-toolkit/
 **交付物**:
 - @trace_ci_step 装饰器
 - GitHub Actions + GitLab CI 支持
-- BuildProfiler 性能分析
+- BuildProfiler 性能分析 (JSON 已实现)
 - CI 集成示例
 - 集成测试
 
@@ -1708,17 +2129,17 @@ skill-observability-toolkit/
 **目标**: Trace ID 跨层传播 + 统一视图
 
 **Week 7: Trace ID 传播**
-- [ ] Task 3.1: CI → Skill 传播
-  - 环境变量传递
-  - 上下文继承
+- [x] Task 3.1: CI → Skill 传播
+  - [x] 环境变量传递
+  - [x] 上下文继承
 
-- [ ] Task 3.2: Skill → MCP 传播
-  - 复用 mcp-with-tracing
-  - Trace ID 关联
+- [ ] Task 3.2: Skill → MCP 传播 (仅计划，未实现)
+  - [ ] 复用 mcp-with-tracing
+  - [ ] Trace ID 关联
 
-- [ ] Task 3.3: 统一标签体系
-  - 标准化标签
-  - 跨层一致性
+- [ ] Task 3.3: 统一标签体系 (仅计划)
+  - [ ] 标准化标签
+  - [ ] 跨层一致性
 
 **Week 8: 统一视图**
 - [ ] Task 3.4: Langfuse Dashboard 优化

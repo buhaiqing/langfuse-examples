@@ -1,10 +1,9 @@
 """Tests for PII Detector."""
 
-import pytest
 from skill_observability_toolkit.integrations.pii_detector import (
+    PIIDetectionResult,
     PIIDetector,
     PIIMatch,
-    PIIDetectionResult,
     PIIType,
 )
 

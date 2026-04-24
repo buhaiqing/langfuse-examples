@@ -1,9 +1,8 @@
 """Tests for Prometheus Metrics Exporter."""
 
-import pytest
 from skill_observability_toolkit.integrations.prometheus_exporter import (
-    PrometheusExporter,
     MetricFamily,
+    PrometheusExporter,
 )
 
 

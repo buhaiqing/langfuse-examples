@@ -1,6 +1,5 @@
 """Tests for Token Tracker."""
 
-import pytest
 from skill_observability_toolkit.integrations.token_tracker import (
     LLMProvider,
     TokenStats,

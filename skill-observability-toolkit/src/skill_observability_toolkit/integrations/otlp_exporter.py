@@ -1,7 +1,7 @@
 """OTLP (OpenTelemetry Protocol) Exporter for STOP Traces."""
 
 import time
-from typing import Any, Dict, List, Optional
+from typing import Any
 
 
 class OTLPExporter:
@@ -14,11 +14,11 @@ class OTLPExporter:
     - Honeycomb
     - Any OTLP gRPC/HTTP endpoint
     """
-    
+
     def __init__(
         self,
         endpoint: str,
-        headers: Optional[Dict[str, str]] = None,
+        headers: dict[str, str] | None = None,
         timeout_ms: int = 10000,
         protocol: str = "grpc"
     ):
@@ -35,19 +35,23 @@ class OTLPExporter:
         self.headers = headers or {}
         self.timeout_ms = timeout_ms
         self.protocol = protocol
-        
+
         # Lazy import to avoid dependency when not used
         self._exporter = None
-    
+
     def _get_exporter(self):
         """Get or create the OTLP exporter."""
         if self._exporter is None:
             try:
                 if self.protocol == "grpc":
-                    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
+                    from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import (
+                        OTLPSpanExporter,
+                    )
                 else:
-                    from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
-                
+                    from opentelemetry.exporter.otlp.proto.http.trace_exporter import (
+                        OTLPSpanExporter,
+                    )
+
                 self._exporter = OTLPSpanExporter(
                     endpoint=self.endpoint,
                     headers=self.headers,
@@ -58,10 +62,10 @@ class OTLPExporter:
                     "OpenTelemetry packages not installed. "
                     "Install with: pip install opentelemetry-exporter-otlp"
                 ) from e
-        
+
         return self._exporter
-    
-    def _convert_to_otel(self, span: Dict[str, Any], trace_id: str) -> Dict[str, Any]:
+
+    def _convert_to_otel(self, span: dict[str, Any], trace_id: str) -> dict[str, Any]:
         """
         Convert STOP Span to OpenTelemetry Span format.
         
@@ -82,24 +86,24 @@ class OTLPExporter:
         # Convert timestamps to nanoseconds
         start_time_nano = int(span.get('start_time', 0) * 1e9)
         end_time_nano = int(span.get('end_time', 0) * 1e9) if span.get('end_time') else int(time.time() * 1e9)
-        
+
         # Build attributes
         attributes = {}
-        
+
         if span.get('input_data'):
             attributes['input'] = str(span['input_data'])
-        
+
         if span.get('output_data'):
             attributes['output'] = str(span['output_data'])
-        
+
         if span.get('scores'):
             for score in span['scores']:
                 attributes[f"scores.{score.get('name')}"] = str(score.get('value'))
-        
+
         if span.get('metadata'):
             for key, value in span['metadata'].items():
                 attributes[f"metadata.{key}"] = str(value)
-        
+
         # Map status
         status = span.get('status', 'running')
         if status == 'success':
@@ -108,7 +112,7 @@ class OTLPExporter:
             status_code = 2  # ERROR
         else:
             status_code = 0  # UNSET
-        
+
         return {
             "trace_id": trace_id,
             "span_id": span.get('span_id'),
@@ -120,8 +124,8 @@ class OTLPExporter:
             "status": {"code": status_code},
             "attributes": attributes,
         }
-    
-    def export(self, trace_data: Dict[str, Any]) -> bool:
+
+    def export(self, trace_data: dict[str, Any]) -> bool:
         """
         Export trace data to OTLP endpoint.
         
@@ -133,35 +137,35 @@ class OTLPExporter:
         """
         try:
             exporter = self._get_exporter()
-            
+
             # Get spans from trace
             spans = trace_data.get('spans', [])
             trace_id = trace_data.get('trace_id', 'unknown')
-            
+
             # Convert spans
             otel_spans = [self._convert_to_otel(span, trace_id) for span in spans]
-            
+
             # Export (placeholder - actual implementation depends on OTel SDK)
             # In production, this would call: exporter.export(otel_spans)
-            
+
             return True
-            
+
         except Exception as e:
             # Log error but don't fail
             print(f"OTLP export failed: {e}")
             return False
-    
+
     def close(self):
         """Close exporter and release resources."""
         if self._exporter is not None:
             if hasattr(self._exporter, 'shutdown'):
                 self._exporter.shutdown()
             self._exporter = None
-    
+
     def __enter__(self):
         """Context manager entry."""
         return self
-    
+
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit."""
         self.close()

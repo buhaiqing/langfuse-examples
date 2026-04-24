@@ -43,7 +43,7 @@ def trace_skill_execution(
         @functools.wraps(func)
         def wrapper(*args, **kwargs):
             from skill_observability_toolkit.langfuse_integration.context import TraceContextManager
-            
+
             client = LangfuseClient.get_instance()
             tracer = STOPTracer()
 

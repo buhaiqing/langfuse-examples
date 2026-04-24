@@ -138,6 +138,15 @@ class TestInitCommand:
 class TestInitIntegration:
     """Integration tests for init command."""
 
+    def setup_method(self):
+        """Set up test fixtures."""
+        self.runner = CliRunner()
+        self.test_dir = tempfile.mkdtemp()
+
+    def teardown_method(self):
+        """Clean up test fixtures."""
+        shutil.rmtree(self.test_dir, ignore_errors=True)
+
     def test_full_project_creation(self):
         """Test complete project creation."""
         project_name = "full-skill-test"

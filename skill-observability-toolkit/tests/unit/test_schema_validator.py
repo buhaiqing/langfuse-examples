@@ -1,9 +1,7 @@
 """Tests for Schema Validator."""
 
-import pytest
 from skill_observability_toolkit.integrations.schema_validator import (
     SchemaValidator,
-    ValidationError,
     ValidationResult,
     ValidationStatus,
 )

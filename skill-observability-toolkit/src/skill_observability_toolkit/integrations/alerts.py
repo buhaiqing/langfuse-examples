@@ -108,21 +108,22 @@ class AlertManager:
             Self for method chaining
         """
         try:
-            import yaml
             from pathlib import Path
-            
+
+            import yaml
+
             config_file = Path(config_path)
             if not config_file.exists():
                 self._rules = self._load_default_rules()
                 return self
-            
+
             with open(config_file) as f:
                 config = yaml.safe_load(f)
-            
+
             if not config or "rules" not in config:
                 self._rules = self._load_default_rules()
                 return self
-            
+
             # Parse rules from config
             for rule_data in config.get("rules", []):
                 rule = AlertRule(
@@ -135,11 +136,11 @@ class AlertManager:
                     annotations=rule_data.get("annotations", {}),
                 )
                 self._rules[rule.name] = rule
-            
+
         except Exception:
             # Fallback to default rules on error
             self._rules = self._load_default_rules()
-        
+
         return self
 
     def _load_default_rules(self) -> dict[str, AlertRule]:

@@ -299,7 +299,7 @@ class DriftDetector:
         actual_bins = self._bin_data(actual, breakpoints)
 
         psi = 0.0
-        for exp_count, act_count in zip(expected_bins, actual_bins):
+        for exp_count, act_count in zip(expected_bins, actual_bins, strict=False):
             exp_pct = (exp_count + 1e-10) / (len(expected) + 1e-10)
             act_pct = (act_count + 1e-10) / (len(actual) + 1e-10)
             psi += (act_pct - exp_pct) * math.log(act_pct / exp_pct)
@@ -318,7 +318,7 @@ class DriftDetector:
     def _bin_data(self, data: list[float], breakpoints: list[float]) -> list[int]:
         """Bin data into intervals defined by breakpoints."""
         bins = [0] * (len(breakpoints) - 1)
-        
+
         if len(breakpoints) < 2:
             return bins
 
@@ -372,7 +372,7 @@ class DriftDetector:
         obs_bins = self._bin_data(observed, breakpoints)
 
         chi2 = 0.0
-        for exp, obs in zip(exp_bins, obs_bins):
+        for exp, obs in zip(exp_bins, obs_bins, strict=False):
             if exp > 0:
                 chi2 += ((obs - exp) ** 2) / exp
 
@@ -398,7 +398,7 @@ class DriftDetector:
         """Series expansion for incomplete gamma function."""
         if k <= 0 or x < 0:
             return 1.0
-            
+
         sum_val = 1.0 / k
         term = 1.0 / k
         for n in range(1, 200):
@@ -440,7 +440,7 @@ class DriftDetector:
         """Log gamma function approximation (Stirling's formula)."""
         if x <= 0:
             return 0.0
-        
+
         if x < 0.001:
             return -math.log(x)
 

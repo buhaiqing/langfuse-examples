@@ -542,25 +542,25 @@ class ManifestParser:
             List of assertion results with 'check', 'passed', 'message' fields
         """
         results = []
-        
+
         try:
             from pathlib import Path
             trace_file = Path(trace_path)
-            
+
             if not trace_file.exists():
                 self.warnings.append(f"Trace file not found: {trace_path}")
                 return results
-            
+
             import json
             with open(trace_file) as f:
                 for line_num, line in enumerate(f, 1):
                     line = line.strip()
                     if not line:
                         continue
-                    
+
                     try:
                         entry = json.loads(line)
-                        
+
                         if entry.get("type") == "assertion":
                             results.append({
                                 "check": entry.get("check", ""),
@@ -573,8 +573,8 @@ class ManifestParser:
                         self.warnings.append(
                             f"Failed to parse line {line_num} in {trace_path}: {e}"
                         )
-                        
+
         except Exception as e:
             self.warnings.append(f"Error reading trace file {trace_path}: {e}")
-        
+
         return results

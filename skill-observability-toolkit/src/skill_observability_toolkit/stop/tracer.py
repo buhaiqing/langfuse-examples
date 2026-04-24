@@ -60,7 +60,7 @@ class TracerContext:
             TracingError: If no trace context exists
         """
         from skill_observability_toolkit.core.errors import TracingError, TracingErrorCode
-        
+
         trace_id = self.ctx_trace_id.get()
         if trace_id is None:
             raise TracingError(
@@ -131,7 +131,6 @@ class TracerContext:
         """
         self.ctx_trace_id.set(None)
         self.ctx_span_stack.set([])
-        self.ctx_span_stack.set(None)
 
 
 # Global tracer context instance
@@ -505,6 +504,20 @@ class SpanContextManager:
             # Pop from context
             tracer_context.pop_span()
 
+    def end(self, output: dict[str, Any] | None = None, status: str = "success") -> None:
+        """
+        End the span manually (alternative to using context manager).
+
+        Args:
+            output: Optional output data
+            status: Span status
+        """
+        if self.span:
+            if output:
+                self.span.output_data.update(output)
+            self.span.end(status=status)
+            tracer_context.pop_span()
+
 
 def trace_skill_execution(
     skill_name: str,
@@ -555,4 +568,5 @@ def trace_skill_execution(
 # Register tracer context with core abstraction layer to avoid circular imports
 # Import at module level after all classes are defined
 from skill_observability_toolkit.core import register_trace_context
+
 register_trace_context(tracer_context)

@@ -6,7 +6,6 @@ tracing with STOP Protocol.
 """
 
 import logging
-import os
 from contextvars import ContextVar
 from typing import Any, Optional
 
@@ -144,7 +143,7 @@ class LangfuseClient:
 
         except Exception as e:
             from skill_observability_toolkit.core.errors import TracingError, TracingErrorCode
-            
+
             trace_id = cls.get_trace_id()
             raise TracingError.from_exception(
                 code=TracingErrorCode.LANGFUSE_API_ERROR,
@@ -188,7 +187,7 @@ class LangfuseClient:
 
             trace_context = get_trace_context()
             trace_id = cls.get_trace_id()
-            
+
             if not trace_id:
                 raise TracingError(
                     code=TracingErrorCode.TRACE_ID_MISSING,
@@ -200,7 +199,7 @@ class LangfuseClient:
                         "score_type": data_type,
                     }
                 )
-            
+
             if trace_context is None:
                 raise TracingError(
                     code=TracingErrorCode.TRACE_CONTEXT_NOT_INITIALIZED,
@@ -220,7 +219,7 @@ class LangfuseClient:
                         "score_name": name,
                     },
                 )
-            
+
             # Apply score to span
             current_span.score(name, value, data_type, comment)
 
@@ -230,7 +229,7 @@ class LangfuseClient:
             raise  # Re-raise structured errors
         except Exception as e:
             from skill_observability_toolkit.core.errors import TracingError, TracingErrorCode
-            
+
             trace_id = cls.get_trace_id()
             raise TracingError.from_exception(
                 code=TracingErrorCode.SCORE_VALIDATION_FAILED,
@@ -270,7 +269,7 @@ class LangfuseClient:
         try:
             from skill_observability_toolkit.core import get_trace_context
             from skill_observability_toolkit.core.errors import TracingError, TracingErrorCode
-            
+
             trace_context = get_trace_context()
             if trace_context is None:
                 raise TracingError(

@@ -18,45 +18,45 @@ class TracingErrorCode(str, Enum):
     
     These codes enable programmatic error handling and monitoring.
     """
-    
+
     # Langfuse Integration Errors
     LANGFUSE_UNAVAILABLE = "LANGFUSE_UNAVAILABLE"
     LANGFUSE_NOT_CONFIGURED = "LANGFUSE_NOT_CONFIGURED"
     LANGFUSE_API_ERROR = "LANGFUSE_API_ERROR"
-    
+
     # Trace Context Errors
     TRACE_CONTEXT_NOT_INITIALIZED = "TRACE_CONTEXT_NOT_INITIALIZED"
     TRACE_ID_MISSING = "TRACE_ID_MISSING"
     SPAN_CONTEXT_CORRUPTED = "SPAN_CONTEXT_CORRUPTED"
-    
+
     # Span Operation Errors
     SPAN_PROPAGATION_FAILED = "SPAN_PROPAGATION_FAILED"
     SPAN_ALREADY_ENDED = "SPAN_ALREADY_ENDED"
     INVALID_SPAN_OPERATION = "INVALID_SPAN_OPERATION"
-    
+
     # Scoring Errors
     SCORE_VALIDATION_FAILED = "SCORE_VALIDATION_FAILED"
     INVALID_SCORE_TYPE = "INVALID_SCORE_TYPE"
     SCORE_VALUE_OUT_OF_RANGE = "SCORE_VALUE_OUT_OF_RANGE"
-    
+
     # Manifest Errors
     MANIFEST_VALIDATION_FAILED = "MANIFEST_VALIDATION_FAILED"
     MANIFEST_PARSE_ERROR = "MANIFEST_PARSE_ERROR"
     MANIFEST_FILE_NOT_FOUND = "MANIFEST_FILE_NOT_FOUND"
-    
+
     # Assertion Errors
     ASSERTION_EXECUTION_FAILED = "ASSERTION_EXECUTION_FAILED"
     ASSERTION_SYNTAX_ERROR = "ASSERTION_SYNTAX_ERROR"
     ASSERTION_CHECK_NOT_FOUND = "ASSERTION_CHECK_NOT_FOUND"
-    
+
     # Configuration Errors
     CONFIG_VALIDATION_FAILED = "CONFIG_VALIDATION_FAILED"
     CONFIG_MISSING_FIELD = "CONFIG_MISSING_FIELD"
-    
+
     # Export Errors
     EXPORT_FAILED = "EXPORT_FAILED"
     EXPORT_TIMEOUT = "EXPORT_TIMEOUT"
-    
+
     # General Errors
     INTERNAL_ERROR = "INTERNAL_ERROR"
     FEATURE_NOT_IMPLEMENTED = "FEATURE_NOT_IMPLEMENTED"
@@ -95,22 +95,22 @@ class TracingError(Exception):
         ...         original_exception=e
         ...     )
     """
-    
+
     code: TracingErrorCode
     message: str
     context: dict[str, Any] = field(default_factory=dict)
     original_exception: Exception | None = None
-    
+
     def __post_init__(self):
         """Validate error structure."""
         if not isinstance(self.code, TracingErrorCode):
             raise ValueError(
                 f"Error code must be TracingErrorCode, got {type(self.code).__name__}"
             )
-        
+
         if not self.message:
             raise ValueError("Error message cannot be empty")
-    
+
     @classmethod
     def from_exception(
         cls,
@@ -137,7 +137,7 @@ class TracingError(Exception):
             context=context or {},
             original_exception=exception,
         )
-    
+
     def to_dict(self) -> dict[str, Any]:
         """
         Convert error to dictionary for logging/monitoring.
@@ -151,25 +151,25 @@ class TracingError(Exception):
             "message": self.message,
             "context": self.context.copy(),
         }
-        
+
         # Include original exception details if present
         if self.original_exception:
             result["original_exception"] = {
                 "type": type(self.original_exception).__name__,
                 "message": str(self.original_exception),
             }
-        
+
         return result
-    
+
     def __str__(self) -> str:
         """String representation for logging."""
         context_str = ", ".join(f"{k}={v}" for k, v in self.context.items())
-        
+
         if context_str:
             return f"[{self.code.value}] {self.message} ({context_str})"
         else:
             return f"[{self.code.value}] {self.message}"
-    
+
     def __repr__(self) -> str:
         """Developer representation."""
         return (

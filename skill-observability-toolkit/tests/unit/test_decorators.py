@@ -43,14 +43,14 @@ class TestTraceSkillExecution:
         def test_skill(x: int) -> int:
             return x * 2
 
-        with patch("src.skill_observability_toolkit.langfuse_integration.decorators.STOPTracer") as mock_tracer_cls:
+        with patch("skill_observability_toolkit.langfuse_integration.decorators.STOPTracer") as mock_tracer_cls:
             mock_tracer = Mock()
             mock_span = Mock()
             mock_tracer.start_span.return_value = mock_span
             mock_tracer.end_trace = Mock()
             mock_tracer_cls.return_value = mock_tracer
 
-            with patch("src.skill_observability_toolkit.langfuse_integration.decorators.get_trace_id", return_value=None):
+            with patch("skill_observability_toolkit.langfuse_integration.decorators.get_trace_id", return_value=None):
                 result = test_skill(5)
 
                 assert result == 10
@@ -63,14 +63,14 @@ class TestTraceSkillExecution:
         def test_skill(x: int) -> int:
             return x * 2
 
-        with patch("src.skill_observability_toolkit.langfuse_integration.decorators.LangfuseClient") as mock_client_cls:
+        with patch("skill_observability_toolkit.langfuse_integration.decorators.LangfuseClient") as mock_client_cls:
             mock_client = Mock()
             mock_client.score_trace = Mock()
             mock_client.get_instance.return_value = mock_client
             mock_client_cls.get_instance.return_value = mock_client
 
-            with patch("src.skill_observability_toolkit.langfuse_integration.decorators.STOPTracer"):
-                with patch("src.skill_observability_toolkit.langfuse_integration.decorators.get_trace_id", return_value=None):
+            with patch("skill_observability_toolkit.langfuse_integration.decorators.STOPTracer"):
+                with patch("skill_observability_toolkit.langfuse_integration.decorators.get_trace_id", return_value=None):
                     result = test_skill(5)
 
                     assert result == 10
@@ -130,14 +130,14 @@ class TestTraceToolCall:
         def test_tool(x: int) -> int:
             return x * 2
 
-        with patch("src.skill_observability_toolkit.langfuse_integration.decorators.STOPTracer") as mock_tracer_cls:
+        with patch("skill_observability_toolkit.langfuse_integration.decorators.STOPTracer") as mock_tracer_cls:
             mock_tracer = Mock()
             mock_span = Mock()
             mock_tracer.start_span.return_value = mock_span
             mock_tracer.end_trace = Mock()
             mock_tracer_cls.return_value = mock_tracer
 
-            with patch("src.skill_observability_toolkit.langfuse_integration.decorators.get_trace_id", return_value=None):
+            with patch("skill_observability_toolkit.langfuse_integration.decorators.get_trace_id", return_value=None):
                 result = test_tool(5)
 
                 assert result == 10
@@ -149,14 +149,14 @@ class TestTraceToolCall:
         def test_tool(x: int) -> int:
             return x * 2
 
-        with patch("src.skill_observability_toolkit.langfuse_integration.decorators.LangfuseClient") as mock_client_cls:
+        with patch("skill_observability_toolkit.langfuse_integration.decorators.LangfuseClient") as mock_client_cls:
             mock_client = Mock()
             mock_client.score_trace = Mock()
             mock_client.get_instance.return_value = mock_client
             mock_client_cls.get_instance.return_value = mock_client
 
-            with patch("src.skill_observability_toolkit.langfuse_integration.decorators.STOPTracer"):
-                with patch("src.skill_observability_toolkit.langfuse_integration.decorators.get_trace_id", return_value=None):
+            with patch("skill_observability_toolkit.langfuse_integration.decorators.STOPTracer"):
+                with patch("skill_observability_toolkit.langfuse_integration.decorators.get_trace_id", return_value=None):
                     result = test_tool(5)
 
                     assert result == 10
@@ -190,14 +190,14 @@ class TestTraceFunction:
         def test_func(x: int) -> int:
             return x * 2
 
-        with patch("src.skill_observability_toolkit.langfuse_integration.decorators.STOPTracer") as mock_tracer_cls:
+        with patch("skill_observability_toolkit.langfuse_integration.decorators.STOPTracer") as mock_tracer_cls:
             mock_tracer = Mock()
             mock_span = Mock()
             mock_tracer.start_span.return_value = mock_span
             mock_tracer.end_trace = Mock()
             mock_tracer_cls.return_value = mock_tracer
 
-            with patch("src.skill_observability_toolkit.langfuse_integration.decorators.get_trace_id", return_value=None):
+            with patch("skill_observability_toolkit.langfuse_integration.decorators.get_trace_id", return_value=None):
                 result = test_func(5)
 
                 assert result == 10

@@ -5,7 +5,7 @@ This module provides assertion checking capabilities for Skills,
 supporting both pre-execution and post-execution validations.
 """
 
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 

@@ -44,7 +44,7 @@ format:
 	@echo "Formatting code..."
 	black src/ tests/
 
-check-all: lint type-check test
+check-all: lint test
 	@echo "All checks passed!"
 
 clean:

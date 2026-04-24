@@ -1,6 +1,5 @@
 """Tests for Drift Detector."""
 
-import pytest
 from skill_observability_toolkit.integrations.drift_detector import (
     DriftDetector,
     DriftMethod,

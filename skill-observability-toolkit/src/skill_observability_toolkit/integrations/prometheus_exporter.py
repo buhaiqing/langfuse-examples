@@ -7,7 +7,6 @@ Provides Prometheus-compatible metrics export with support for:
 - Histograms (distributions)
 """
 
-import time
 from dataclasses import dataclass, field
 from typing import Any
 

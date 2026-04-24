@@ -1,6 +1,5 @@
 """Tests for Trust Score Calculator."""
 
-import pytest
 from skill_observability_toolkit.stop.trust_score import TrustScoreCalculator, TrustScoreConfig
 
 

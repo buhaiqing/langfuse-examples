@@ -6,7 +6,7 @@ with exponential decay for recent events.
 """
 
 import time
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from typing import Any
 
 

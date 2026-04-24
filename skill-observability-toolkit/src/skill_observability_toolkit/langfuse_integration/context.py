@@ -99,14 +99,15 @@ class TraceContextManager:
     ):
         self.trace_id = trace_id
         self.parent_trace_id = parent_trace_id
-        self._tokens = []
+        self._trace_id_tokens: list = []
+        self._parent_trace_id_tokens: list = []
 
     def __enter__(self):
         """Enter context manager."""
         if self.trace_id:
-            self._tokens.append(_trace_id_context.set(self.trace_id))
+            self._trace_id_tokens.append(_trace_id_context.set(self.trace_id))
         if self.parent_trace_id:
-            self._tokens.append(_parent_trace_id_context.set(self.parent_trace_id))
+            self._parent_trace_id_tokens.append(_parent_trace_id_context.set(self.parent_trace_id))
         return self
 
     def end(self):
@@ -115,13 +116,20 @@ class TraceContextManager:
 
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Exit context manager and restore context."""
-        for token in reversed(self._tokens):
+        for token in reversed(self._trace_id_tokens):
             try:
                 _trace_id_context.reset(token)
             except Exception:
                 pass
 
-        self._tokens = []
+        for token in reversed(self._parent_trace_id_tokens):
+            try:
+                _parent_trace_id_context.reset(token)
+            except Exception:
+                pass
+
+        self._trace_id_tokens = []
+        self._parent_trace_id_tokens = []
         return False
 
 

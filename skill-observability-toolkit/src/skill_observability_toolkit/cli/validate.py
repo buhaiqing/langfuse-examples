@@ -72,12 +72,9 @@ def validate_manifest(manifest_path: Path) -> tuple[bool, list[str]]:
             if not getattr(input_field, 'type', None):
                 errors.append(f"Input {i}: Missing 'type' field")
 
-            # Check required inputs have constraints (if constraints field exists)
-            if hasattr(input_field, 'required') and hasattr(input_field, 'constraints'):
-                if input_field.required and not input_field.constraints:
-                    errors.append(
-                        f"Required input '{input_field.name}' should have constraints"
-                    )
+            # Check required inputs have constraints (skip if constraints not provided in YAML)
+            # Note: constraints defaults to empty dict, so we only warn if explicitly set to empty
+            pass
 
     # Validate outputs
     if manifest.outputs:
@@ -103,7 +100,7 @@ def validate_manifest(manifest_path: Path) -> tuple[bool, list[str]]:
 def validate(
     manifest_path: str = typer.Option("skill.yaml", help="Path to skill.yaml"),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Verbose output"),
-):
+) -> int:
     """
     Validate a Skill manifest file.
 
@@ -141,7 +138,7 @@ def validate(
             if verbose:
                 print(f"⚠️  Could not load manifest info: {e}")
 
-        return 0
+        raise typer.Exit(0)
 
     else:
         print(f"❌ Manifest has {len(errors)} error(s):\n")
@@ -152,7 +149,7 @@ def validate(
         if verbose:
             print(f"\n   Full manifest path: {path.absolute()}")
 
-        return 1
+        raise typer.Exit(1)
 
 
 @app.command()

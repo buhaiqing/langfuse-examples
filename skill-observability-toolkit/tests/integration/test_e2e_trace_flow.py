@@ -5,15 +5,14 @@ Tests the complete flow from CI pipeline -> Skill execution -> Langfuse integrat
 """
 
 import os
-import tempfile
 from pathlib import Path
 
 import pytest
 
-from skill_observability_toolkit.config import get_config, reload_config
 from skill_observability_toolkit.ci.decorators import trace_ci_step
-from skill_observability_toolkit.stop.tracer import STOPTracer, trace_skill_execution
+from skill_observability_toolkit.config import reload_config
 from skill_observability_toolkit.correlation.correlation import correlate_traces
+from skill_observability_toolkit.stop.tracer import STOPTracer, trace_skill_execution
 
 
 class TestEndToEndTraceFlow:
@@ -226,8 +225,6 @@ class TestCrossLayerCorrelation:
         """Test building correlation tree across layers."""
         from skill_observability_toolkit.correlation.correlation import (
             TraceCorrelator,
-            start_trace,
-            start_span,
         )
 
         correlator = TraceCorrelator()

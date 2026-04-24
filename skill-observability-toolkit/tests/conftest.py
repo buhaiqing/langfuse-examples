@@ -1,7 +1,7 @@
 """Test fixtures for skill-observability-toolkit."""
 
+
 import pytest
-from pathlib import Path
 
 
 @pytest.fixture
@@ -86,6 +86,26 @@ trust_score:
     yaml_file = tmp_path / "skill.yaml"
     yaml_file.write_text(content)
     return str(yaml_file)
+
+
+@pytest.fixture(autouse=True)
+def reset_singletons():
+    """Reset singleton instances before each test to avoid state pollution."""
+    # Reset config singleton
+    import skill_observability_toolkit.config as config_module
+    from skill_observability_toolkit.langfuse_integration.client import LangfuseClient
+    config_module._config = None
+
+    # Reset LangfuseClient singleton
+    LangfuseClient._instance = None
+    LangfuseClient._langfuse = None
+
+    yield
+
+    # Clean up after test
+    config_module._config = None
+    LangfuseClient._instance = None
+    LangfuseClient._langfuse = None
 
 
 @pytest.fixture

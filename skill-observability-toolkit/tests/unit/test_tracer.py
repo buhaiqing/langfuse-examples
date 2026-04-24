@@ -13,7 +13,6 @@ from skill_observability_toolkit.stop.tracer import (
     Span,
     STOPTracer,
     TracerContext,
-    TracerContextNotInitialized,
     trace_skill_execution,
 )
 

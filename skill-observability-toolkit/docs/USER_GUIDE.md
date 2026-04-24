@@ -138,6 +138,7 @@ stop <command> [options]
   init          创建新 Skill 项目
   validate      验证 skill.yaml Manifest
   run           执行 Skill 并追踪
+  observe       给现有 Skill 添加可观测性
   report        生成追踪报告
   compare       对比多个版本 Skill
   trust-score   计算 Trust Score
@@ -304,7 +305,75 @@ stop run --output trace.ndjson
 {"timestamp": "2026-04-24T10:30:16Z", "trace_id": "skill_trace_abc123", "type": "trace_end", "duration_ms": 16000, "trust_score": 1.0}
 ```
 
-### 3.5 `stop report` - 追踪报告分析
+### 3.5 `stop observe` - 现有 Skill 可观测化
+
+**功能**: 一键给现有 Agent Skill 添加可观测性能力，自动分析代码生成 skill.yaml
+
+**用法**:
+```bash
+stop observe --path <skill-path> [options]
+
+# 基础分析
+stop observe --path ./my-existing-skill
+
+# 指定入口函数
+stop observe --path ./my-skill --entry-point execute
+
+# 输出到指定目录
+stop observe --path ./my-skill --output-dir ./output
+
+# 启用 Langfuse 追踪
+stop observe --path ./my-skill --langfuse
+
+# 仅分析不修改（预览）
+stop observe --path ./my-skill --dry-run
+
+# 详细输出
+stop observe --path ./my-skill --verbose
+```
+
+**分析流程**:
+1. **AST 代码解析**: 自动分析 Skill 入口函数
+2. **输入输出提取**: 从函数签名推断 inputs/outputs
+3. **工具检测**: 识别使用的工具（文件读写、网络请求等）
+4. **skill.yaml 生成**: 自动生成符合规范的 Manifest
+5. **可观测性注入**: 可选添加 Langfuse 追踪装饰器
+
+**输出示例**:
+```
+ℹ️  Analyzing Skill: ./my-existing-skill
+✅ Entry Point: execute (function)
+✅ Inputs: 2 detected (code_path, language)
+✅ Outputs: 1 detected (result)
+✅ Tools Used: [read_file, web_search]
+✅ Generated: skill.yaml
+
+📄 Generated skill.yaml:
+---
+sop: "1.0.0"
+name: my-existing-skill
+version: "0.1.0"
+description: "Analyze code quality"
+inputs:
+  - name: code_path
+    type: file_path
+    required: true
+    description: "code_path parameter"
+outputs:
+  - name: result
+    type: dict
+    description: "执行结果"
+    guaranteed: true
+tools_used:
+  - read_file
+  - web_search
+observability:
+  level: L2
+  langfuse_integration: true
+---
+```
+
+### 3.6 `stop report` - 追踪报告分析
 
 **功能**: 解析追踪日志生成可视化报告
 
@@ -358,7 +427,7 @@ Performance Metrics:
 └─ Average Trust Score (last 30 days): 0.92
 ```
 
-### 3.6 `stop compare` - 多版本对比
+### 3.7 `stop compare` - 多版本对比
 
 **功能**: A/B 测试 Skill 版本性能对比
 
@@ -376,7 +445,7 @@ stop compare my-code-reviewer --versions "1.0.0,1.1.0" --metrics "duration,trust
 stop compare my-code-reviewer --versions "1.0.0,1.1.0" --output comparison.md
 ```
 
-### 3.7 `stop trust-score` - 可靠性评分
+### 3.8 `stop trust-score` - 可靠性评分
 
 **功能**: 计算 Skill 历史执行的 Trust Score
 

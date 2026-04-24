@@ -40,8 +40,11 @@ class TestLangfuseClient:
             "LANGFUSE_PUBLIC_KEY": "",
             "LANGFUSE_SECRET_KEY": "",
         }, clear=True):
+            # Reset singleton instance to ensure fresh state
+            LangfuseClient._instance = None
+            LangfuseClient._langfuse = None
             client = LangfuseClient.get_instance()
-            assert client._langfuse is None
+            assert client is None
 
     def test_is_available_returns_true_when_configured(self):
         """Test is_available returns True when configured."""
@@ -67,7 +70,7 @@ class TestLangfuseClient:
             "LANGFUSE_SECRET_KEY": "test_secret_key",
         }):
             with patch("skill_observability_toolkit.langfuse_integration.client.Langfuse"):
-                with patch("skill_observability_toolkit.langfuse_integration.client.uuid.uuid4") as mock_uuid:
+                with patch("uuid.uuid4") as mock_uuid:
                     mock_uuid.return_value.hex = "test1234test5678test9012"
 
                     trace_id = LangfuseClient.start_trace(name="test_skill")
@@ -99,11 +102,11 @@ class TestLangfuseClient:
 
     def test_clear_trace_context(self):
         """Test clearing trace context."""
-        set_trace_id("test_trace_123")
+        LangfuseClient.set_trace_id("test_trace_123")
 
         LangfuseClient.clear_trace_context()
 
-        assert get_trace_id() is None
+        assert LangfuseClient.get_trace_id() is None
 
     def test_score_trace_when_client_available(self):
         """Test scoring trace when Langfuse client is available."""
@@ -113,9 +116,11 @@ class TestLangfuseClient:
         }):
             with patch("skill_observability_toolkit.langfuse_integration.client.Langfuse"):
                 with patch.object(LangfuseClient, 'get_trace_id', return_value="test_trace"):
-                    with patch("skill_observability_toolkit.stop.tracer.tracer_context") as mock_tracer_ctx:
+                    with patch("skill_observability_toolkit.core.get_trace_context") as mock_get_ctx:
+                        mock_ctx = Mock()
                         mock_span = Mock()
-                        mock_tracer_ctx.get_current_span.return_value = mock_span
+                        mock_ctx.get_current_span.return_value = mock_span
+                        mock_get_ctx.return_value = mock_ctx
 
                         result = LangfuseClient.score_trace(
                             name="test_score",

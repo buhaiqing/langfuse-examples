@@ -1,8 +1,6 @@
 """CLI command for displaying Trust Score."""
 
 import json
-from pathlib import Path
-from typing import Dict, Any
 
 import typer
 
@@ -13,7 +11,7 @@ def calculate_trust_score(results: list) -> float:
     """Calculate trust score from results."""
     if not results:
         return 1.0
-    
+
     passed_count = sum(1 for r in results if r.get('passed', False))
     return passed_count / len(results)
 
@@ -33,9 +31,9 @@ def show(
         {"passed": True, "assertion": "test4"},
         {"passed": True, "assertion": "test5"},
     ]
-    
+
     score = calculate_trust_score(results)
-    
+
     if format == "json":
         output = {
             "skill": skill,
@@ -50,7 +48,7 @@ def show(
         bar_length = 40
         filled = int(score * bar_length)
         bar = "█" * filled + "░" * (bar_length - filled)
-        
+
         typer.echo(f"""
 Trust Score for: {skill}
 Period: Last {days} days

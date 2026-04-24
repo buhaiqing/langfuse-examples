@@ -1,6 +1,5 @@
 """Tests for Grafana Dashboard Generator."""
 
-import pytest
 from skill_observability_toolkit.integrations.grafana_dashboard import (
     DashboardConfig,
     GrafanaDashboardGenerator,

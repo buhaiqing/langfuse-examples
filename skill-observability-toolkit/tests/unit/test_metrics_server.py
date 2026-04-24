@@ -2,7 +2,6 @@
 
 import time
 
-import pytest
 from skill_observability_toolkit.integrations.metrics_server import MetricsServer
 
 
