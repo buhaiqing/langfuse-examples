@@ -4,17 +4,16 @@
 使用 Redis Sorted Set 实现滑动窗口限流算法，支持分布式限流
 """
 
+import logging
 import time
-from typing import Optional, Tuple
-
-from fastapi import Request
-from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.responses import JSONResponse
+from functools import lru_cache
 
 from core.config import settings
 from core.langfuse_client import langfuse_client
+from fastapi import Request
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import JSONResponse
 from storage.redis_client import redis_client
-import logging
 
 logger = logging.getLogger(__name__)
 
@@ -22,7 +21,7 @@ logger = logging.getLogger(__name__)
 class RedisRateLimitMiddleware(BaseHTTPMiddleware):
     """基于 Redis 的速率限制中间件"""
 
-    def __init__(self, app, excluded_paths: Optional[set] = None):
+    def __init__(self, app, excluded_paths: set | None = None):
         """
         初始化限流中间件
 
@@ -108,7 +107,7 @@ class RedisRateLimitMiddleware(BaseHTTPMiddleware):
 
         return f"ip:{ip}"
 
-    async def _check_rate_limit(self, client_id: str) -> Tuple[bool, int]:
+    async def _check_rate_limit(self, client_id: str) -> tuple[bool, int]:
         """
         检查是否超过速率限制（使用 Redis）
 
@@ -154,6 +153,6 @@ def rate_limit(max_requests: int = 100, window_seconds: int = 60):
 
 
 @lru_cache
-def get_rate_limit_config() -> Tuple[int, int]:
+def get_rate_limit_config() -> tuple[int, int]:
     """获取限流配置"""
     return settings.rate_limit_requests, settings.rate_limit_seconds

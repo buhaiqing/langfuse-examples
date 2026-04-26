@@ -9,16 +9,16 @@
 - 记录请求耗时
 """
 
-import time
 import json
 import logging
+import time
 import uuid
-from typing import Optional, Set, Dict, Any
+from typing import Any
+
+from core.config import settings
 from fastapi import Request, Response
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.types import ASGIApp
-
-from core.config import settings
 
 logger = logging.getLogger("api.access")
 
@@ -37,7 +37,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     """
 
     # 敏感字段，需要脱敏
-    SENSITIVE_FIELDS: Set[str] = {
+    SENSITIVE_FIELDS: set[str] = {
         "authorization",
         "x-api-key",
         "api-key",
@@ -49,7 +49,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     }
 
     # 敏感请求体字段
-    SENSITIVE_BODY_FIELDS: Set[str] = {
+    SENSITIVE_BODY_FIELDS: set[str] = {
         "password",
         "token",
         "secret",
@@ -63,7 +63,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
     def __init__(
         self,
         app: ASGIApp,
-        excluded_paths: Optional[Set[str]] = None,
+        excluded_paths: set[str] | None = None,
         log_request_body: bool = False,
         log_response_body: bool = False,
     ):
@@ -119,10 +119,12 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             duration_ms = round((time.time() - start_time) * 1000, 2)
 
             # 添加响应信息
-            request_log.update({
-                "status_code": response.status_code,
-                "duration_ms": duration_ms,
-            })
+            request_log.update(
+                {
+                    "status_code": response.status_code,
+                    "duration_ms": duration_ms,
+                }
+            )
 
             # 设置请求 ID 到响应头
             response.headers["X-Request-ID"] = request_id
@@ -146,11 +148,13 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
         except Exception as e:
             # 记录异常
             duration_ms = round((time.time() - start_time) * 1000, 2)
-            request_log.update({
-                "status_code": 500,
-                "duration_ms": duration_ms,
-                "error": str(e),
-            })
+            request_log.update(
+                {
+                    "status_code": 500,
+                    "duration_ms": duration_ms,
+                    "error": str(e),
+                }
+            )
             logger.error(json.dumps(request_log, ensure_ascii=False))
             raise
 
@@ -172,7 +176,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
 
         return "unknown"
 
-    def _sanitize_headers(self, headers: Dict[str, str]) -> Dict[str, str]:
+    def _sanitize_headers(self, headers: dict[str, str]) -> dict[str, str]:
         """脱敏请求头"""
         sanitized = {}
         for key, value in headers.items():
@@ -196,7 +200,10 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
                     sanitized[key] = value
             return sanitized
         elif isinstance(body, list):
-            return [self._sanitize_body(item) if isinstance(item, (dict, list)) else item for item in body]
+            return [
+                self._sanitize_body(item) if isinstance(item, (dict, list)) else item
+                for item in body
+            ]
         return body
 
     def _mask_sensitive_value(self, value: str, visible_chars: int = 4) -> str:
@@ -225,7 +232,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             return value[:max_length] + "... [truncated]"
         return value
 
-    async def _get_request_body(self, request: Request) -> Optional[Any]:
+    async def _get_request_body(self, request: Request) -> Any | None:
         """获取请求体"""
         try:
             body = await request.body()
@@ -238,7 +245,7 @@ class RequestLoggingMiddleware(BaseHTTPMiddleware):
             pass
         return None
 
-    async def _get_response_body(self, response: Response) -> Optional[str]:
+    async def _get_response_body(self, response: Response) -> str | None:
         """获取响应体"""
         try:
             # 尝试读取响应体
@@ -296,7 +303,5 @@ def setup_logging():
     # 如果根日志没有处理器，添加一个
     if not root_logger.handlers:
         root_handler = logging.StreamHandler()
-        root_handler.setFormatter(
-            logging.Formatter(settings.log_format)
-        )
+        root_handler.setFormatter(logging.Formatter(settings.log_format))
         root_logger.addHandler(root_handler)

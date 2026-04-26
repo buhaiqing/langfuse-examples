@@ -13,11 +13,13 @@ from src.observability.decorators import (
     track_session,
 )
 from src.observability.instrumentation import (
-    clear_session_context,
     get_langfuse_client,
-    get_session_context,
     init_observability,
-    set_session_context,
+)
+from src.observability.session import (
+    SessionManager,
+    set_session,
+    clear_session,
 )
 
 
@@ -96,14 +98,14 @@ class TestInstrumentation:
 
     def test_session_context(self):
         """Test session context management."""
-        set_session_context("session-123", "user-456")
-        ctx = get_session_context()
+        set_session(session_id="session-123", user_id="user-456")
+        ctx = SessionManager.get_session()
 
         assert ctx["session_id"] == "session-123"
         assert ctx["user_id"] == "user-456"
 
-        clear_session_context()
-        ctx = get_session_context()
+        clear_session()
+        ctx = SessionManager.get_session()
         assert ctx == {}
 
 

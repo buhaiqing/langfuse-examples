@@ -9,15 +9,18 @@ Redis 降级预案模块
 """
 
 import asyncio
-import time
 import logging
 import threading
-from typing import Optional, Dict, Any, Callable, Awaitable
-from datetime import datetime, timedelta
-from dataclasses import dataclass, field
+import time
 from collections import OrderedDict
-from functools import wraps
+from collections.abc import Awaitable, Callable
+from dataclasses import dataclass
+from datetime import datetime
 from enum import Enum
+from functools import wraps
+from typing import Any
+
+from utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -25,43 +28,46 @@ logger = logging.getLogger(__name__)
 # ==================== 熔断器状态 ====================
 class CircuitState(Enum):
     """熔断器状态"""
-    CLOSED = "closed"       # 正常状态，允许请求通过
-    OPEN = "open"           # 熔断状态，拒绝所有请求
-    HALF_OPEN = "half_open" # 半开状态，允许部分请求测试恢复
+
+    CLOSED = "closed"  # 正常状态，允许请求通过
+    OPEN = "open"  # 熔断状态，拒绝所有请求
+    HALF_OPEN = "half_open"  # 半开状态，允许部分请求测试恢复
 
 
 @dataclass
 class CircuitStats:
     """熔断器统计"""
+
     total_requests: int = 0
     success_requests: int = 0
     failed_requests: int = 0
     consecutive_failures: int = 0
     consecutive_successes: int = 0
-    last_failure_time: Optional[datetime] = None
-    last_success_time: Optional[datetime] = None
-    last_state_change: Optional[datetime] = None
+    last_failure_time: datetime | None = None
+    last_success_time: datetime | None = None
+    last_state_change: datetime | None = None
 
 
 # ==================== 熔断器配置 ====================
 @dataclass
 class CircuitBreakerConfig:
     """熔断器配置"""
+
     # 熔断阈值
-    failure_threshold: int = 5           # 连续失败次数阈值，触发熔断
+    failure_threshold: int = 5  # 连续失败次数阈值，触发熔断
     failure_rate_threshold: float = 0.5  # 失败率阈值 (50%)，触发熔断
-    min_requests_for_rate: int = 10      # 计算失败率的最小请求数
+    min_requests_for_rate: int = 10  # 计算失败率的最小请求数
 
     # 恢复配置
-    recovery_timeout: int = 30           # 熔断后等待恢复的时间（秒）
-    half_open_max_calls: int = 3         # 半开状态最大测试调用数
-    success_threshold: int = 2           # 半开状态连续成功次数，恢复为关闭
+    recovery_timeout: int = 30  # 熔断后等待恢复的时间（秒）
+    half_open_max_calls: int = 3  # 半开状态最大测试调用数
+    success_threshold: int = 2  # 半开状态连续成功次数，恢复为关闭
 
     # 超时配置
-    call_timeout: float = 5.0            # 单次调用超时时间（秒）
+    call_timeout: float = 5.0  # 单次调用超时时间（秒）
 
     # 监控配置
-    stats_window_seconds: int = 60       # 统计窗口时间（秒）
+    stats_window_seconds: int = 60  # 统计窗口时间（秒）
 
 
 # ==================== 熔断器实现 ====================
@@ -76,14 +82,14 @@ class CircuitBreaker:
     HALF_OPEN -> OPEN: 再次失败
     """
 
-    def __init__(self, name: str, config: Optional[CircuitBreakerConfig] = None):
+    def __init__(self, name: str, config: CircuitBreakerConfig | None = None):
         self.name = name
         self.config = config or CircuitBreakerConfig()
         self.state = CircuitState.CLOSED
         self.stats = CircuitStats()
         self._lock = asyncio.Lock()
         self._half_open_calls = 0
-        self._opened_at: Optional[float] = None
+        self._opened_at: float | None = None
 
     async def can_execute(self) -> bool:
         """检查是否允许执行请求"""
@@ -119,14 +125,16 @@ class CircuitBreaker:
         if self.state != CircuitState.OPEN:
             self.state = CircuitState.OPEN
             self._opened_at = time.time()
-            self.stats.last_state_change = datetime.utcnow()
+            self.stats.last_state_change = utcnow()
             self._half_open_calls = 0
-            logger.warning(f"熔断器 [{self.name}] 打开 - 连续失败 {self.stats.consecutive_failures}")
+            logger.warning(
+                f"熔断器 [{self.name}] 打开 - 连续失败 {self.stats.consecutive_failures}"
+            )
 
     def _transition_to_half_open(self):
         """转换到半开状态"""
         self.state = CircuitState.HALF_OPEN
-        self.stats.last_state_change = datetime.utcnow()
+        self.stats.last_state_change = utcnow()
         self._half_open_calls = 0
         logger.info(f"熔断器 [{self.name}] 半开 - 尝试恢复")
 
@@ -135,7 +143,7 @@ class CircuitBreaker:
         if self.state != CircuitState.CLOSED:
             self.state = CircuitState.CLOSED
             self._opened_at = None
-            self.stats.last_state_change = datetime.utcnow()
+            self.stats.last_state_change = utcnow()
             self._half_open_calls = 0
             self.stats.consecutive_failures = 0
             logger.info(f"熔断器 [{self.name}] 关闭 - 服务恢复")
@@ -147,21 +155,21 @@ class CircuitBreaker:
             self.stats.success_requests += 1
             self.stats.consecutive_successes += 1
             self.stats.consecutive_failures = 0
-            self.stats.last_success_time = datetime.utcnow()
+            self.stats.last_success_time = utcnow()
 
             if self.state == CircuitState.HALF_OPEN:
                 # 半开状态下，连续成功达到阈值则恢复
                 if self.stats.consecutive_successes >= self.config.success_threshold:
                     self._transition_to_closed()
 
-    async def record_failure(self, error: Optional[Exception] = None):
+    async def record_failure(self, error: Exception | None = None):
         """记录失败"""
         async with self._lock:
             self.stats.total_requests += 1
             self.stats.failed_requests += 1
             self.stats.consecutive_failures += 1
             self.stats.consecutive_successes = 0
-            self.stats.last_failure_time = datetime.utcnow()
+            self.stats.last_failure_time = utcnow()
 
             if self.state == CircuitState.HALF_OPEN:
                 # 半开状态下失败，立即熔断
@@ -191,7 +199,7 @@ class CircuitBreaker:
         """获取当前状态"""
         return self.state
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """获取统计信息"""
         return {
             "name": self.name,
@@ -203,19 +211,17 @@ class CircuitBreaker:
             "consecutive_successes": self.stats.consecutive_successes,
             "failure_rate": (
                 self.stats.failed_requests / self.stats.total_requests
-                if self.stats.total_requests > 0 else 0
+                if self.stats.total_requests > 0
+                else 0
             ),
             "last_failure_time": (
-                self.stats.last_failure_time.isoformat()
-                if self.stats.last_failure_time else None
+                self.stats.last_failure_time.isoformat() if self.stats.last_failure_time else None
             ),
             "last_success_time": (
-                self.stats.last_success_time.isoformat()
-                if self.stats.last_success_time else None
+                self.stats.last_success_time.isoformat() if self.stats.last_success_time else None
             ),
             "last_state_change": (
-                self.stats.last_state_change.isoformat()
-                if self.stats.last_state_change else None
+                self.stats.last_state_change.isoformat() if self.stats.last_state_change else None
             ),
             "opened_at": self._opened_at,
             "recovery_timeout": self.config.recovery_timeout,
@@ -247,7 +253,7 @@ class LocalCache:
         self.max_size = max_size
         self.default_ttl = default_ttl
         self._cache: OrderedDict = OrderedDict()
-        self._ttl: Dict[str, float] = {}
+        self._ttl: dict[str, float] = {}
         self._lock = threading.Lock()
         self._stats = {
             "hits": 0,
@@ -257,7 +263,7 @@ class LocalCache:
             "sets": 0,
         }
 
-    def get(self, key: str) -> Optional[Any]:
+    def get(self, key: str) -> Any | None:
         """获取缓存值"""
         with self._lock:
             # 检查过期
@@ -276,7 +282,7 @@ class LocalCache:
             self._stats["misses"] += 1
             return None
 
-    def set(self, key: str, value: Any, ttl: Optional[int] = None) -> None:
+    def set(self, key: str, value: Any, ttl: int | None = None) -> None:
         """设置缓存值"""
         with self._lock:
             ttl = ttl or self.default_ttl
@@ -319,10 +325,7 @@ class LocalCache:
         """清理过期缓存"""
         current_time = time.time()
         with self._lock:
-            expired_keys = [
-                key for key, expiry in self._ttl.items()
-                if current_time > expiry
-            ]
+            expired_keys = [key for key, expiry in self._ttl.items() if current_time > expiry]
             for key in expired_keys:
                 self._remove(key)
                 self._stats["expired"] += 1
@@ -330,14 +333,11 @@ class LocalCache:
             if expired_keys:
                 logger.debug(f"清理过期缓存: {len(expired_keys)} 个")
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """获取缓存统计"""
         with self._lock:
             total_requests = self._stats["hits"] + self._stats["misses"]
-            hit_rate = (
-                self._stats["hits"] / total_requests
-                if total_requests > 0 else 0
-            )
+            hit_rate = self._stats["hits"] / total_requests if total_requests > 0 else 0
 
             return {
                 "size": len(self._cache),
@@ -359,24 +359,26 @@ class LocalCache:
 # ==================== 降级策略 ====================
 class FallbackStrategy(Enum):
     """降级策略"""
-    CACHE = "cache"           # 使用本地缓存
-    DEFAULT_VALUE = "default" # 使用默认值
-    EMPTY = "empty"           # 返回空值
-    RAISE = "raise"           # 抛出异常
+
+    CACHE = "cache"  # 使用本地缓存
+    DEFAULT_VALUE = "default"  # 使用默认值
+    EMPTY = "empty"  # 返回空值
+    RAISE = "raise"  # 抛出异常
 
 
 @dataclass
 class FallbackConfig:
     """降级配置"""
+
     strategy: FallbackStrategy = FallbackStrategy.CACHE
-    default_value: Optional[Any] = None
-    cache_ttl: int = 300         # 本地缓存 TTL（秒）
-    cache_max_size: int = 1000   # 本地缓存最大容量
+    default_value: Any | None = None
+    cache_ttl: int = 300  # 本地缓存 TTL（秒）
+    cache_max_size: int = 1000  # 本地缓存最大容量
 
     # 自动恢复配置
     auto_recovery_enabled: bool = True
     recovery_check_interval: int = 30  # 恢复检查间隔（秒）
-    recovery_max_attempts: int = 3     # 最大恢复尝试次数
+    recovery_max_attempts: int = 3  # 最大恢复尝试次数
 
 
 # ==================== Redis 降级管理器 ====================
@@ -389,8 +391,8 @@ class RedisFallbackManager:
 
     def __init__(
         self,
-        circuit_config: Optional[CircuitBreakerConfig] = None,
-        fallback_config: Optional[FallbackConfig] = None,
+        circuit_config: CircuitBreakerConfig | None = None,
+        fallback_config: FallbackConfig | None = None,
     ):
         self.circuit_breaker = CircuitBreaker(
             name="redis",
@@ -402,17 +404,17 @@ class RedisFallbackManager:
             default_ttl=self.fallback_config.cache_ttl,
         )
 
-        self._recovery_task: Optional[asyncio.Task] = None
+        self._recovery_task: asyncio.Task | None = None
         self._recovery_attempts = 0
         self._is_degraded = False
-        self._degraded_at: Optional[datetime] = None
+        self._degraded_at: datetime | None = None
 
     async def execute_with_fallback(
         self,
         operation: Callable[[], Awaitable[Any]],
-        key: Optional[str] = None,
-        fallback_value: Optional[Any] = None,
-        cache_ttl: Optional[int] = None,
+        key: str | None = None,
+        fallback_value: Any | None = None,
+        cache_ttl: int | None = None,
     ) -> Any:
         """
         执行操作，支持降级
@@ -428,7 +430,7 @@ class RedisFallbackManager:
         """
         # 检查熔断器状态
         if not await self.circuit_breaker.can_execute():
-            logger.warning(f"Redis 熔断器打开，使用降级策略")
+            logger.warning("Redis 熔断器打开，使用降级策略")
             return self._apply_fallback(key, fallback_value)
 
         try:
@@ -454,7 +456,7 @@ class RedisFallbackManager:
 
         except asyncio.TimeoutError as e:
             await self.circuit_breaker.record_failure(e)
-            logger.warning(f"Redis 操作超时，使用降级策略")
+            logger.warning("Redis 操作超时，使用降级策略")
             return self._apply_fallback(key, fallback_value)
 
         except Exception as e:
@@ -464,13 +466,13 @@ class RedisFallbackManager:
 
     def _apply_fallback(
         self,
-        key: Optional[str],
-        fallback_value: Optional[Any],
+        key: str | None,
+        fallback_value: Any | None,
     ) -> Any:
         """应用降级策略"""
         if not self._is_degraded:
             self._is_degraded = True
-            self._degraded_at = datetime.utcnow()
+            self._degraded_at = utcnow()
             logger.warning("进入 Redis 降级状态")
 
         strategy = self.fallback_config.strategy
@@ -496,7 +498,7 @@ class RedisFallbackManager:
 
         return None
 
-    def _get_default_value(self, fallback_value: Optional[Any]) -> Any:
+    def _get_default_value(self, fallback_value: Any | None) -> Any:
         """获取默认值"""
         if fallback_value is not None:
             return fallback_value
@@ -512,9 +514,7 @@ class RedisFallbackManager:
         if not self.fallback_config.auto_recovery_enabled:
             return
 
-        self._recovery_task = asyncio.create_task(
-            self._recovery_loop(check_func)
-        )
+        self._recovery_task = asyncio.create_task(self._recovery_loop(check_func))
         logger.info("启动 Redis 自动恢复检查")
 
     async def _recovery_loop(self, check_func: Callable[[], Awaitable[bool]]):
@@ -562,14 +562,11 @@ class RedisFallbackManager:
         """清理过期缓存"""
         self.local_cache.cleanup_expired()
 
-    def get_status(self) -> Dict[str, Any]:
+    def get_status(self) -> dict[str, Any]:
         """获取降级状态"""
         return {
             "is_degraded": self._is_degraded,
-            "degraded_at": (
-                self._degraded_at.isoformat()
-                if self._degraded_at else None
-            ),
+            "degraded_at": (self._degraded_at.isoformat() if self._degraded_at else None),
             "recovery_attempts": self._recovery_attempts,
             "circuit_breaker": self.circuit_breaker.get_stats(),
             "local_cache": self.local_cache.get_stats(),
@@ -588,9 +585,9 @@ class RedisFallbackManager:
 
 # ==================== 装饰器 ====================
 def with_redis_fallback(
-    key: Optional[str] = None,
-    fallback_value: Optional[Any] = None,
-    cache_ttl: Optional[int] = None,
+    key: str | None = None,
+    fallback_value: Any | None = None,
+    cache_ttl: int | None = None,
 ):
     """
     Redis 操作降级装饰器
@@ -602,6 +599,7 @@ def with_redis_fallback(
         return await redis_client.get_user_profile(user_id)
     ```
     """
+
     def decorator(func: Callable[[], Awaitable[Any]]):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -614,12 +612,14 @@ def with_redis_fallback(
                 fallback_value=fallback_value,
                 cache_ttl=cache_ttl,
             )
+
         return wrapper
+
     return decorator
 
 
 # ==================== 全局实例 ====================
-_redis_fallback_manager: Optional[RedisFallbackManager] = None
+_redis_fallback_manager: RedisFallbackManager | None = None
 
 
 def get_redis_fallback_manager() -> RedisFallbackManager:
@@ -633,8 +633,8 @@ def get_redis_fallback_manager() -> RedisFallbackManager:
 
 
 def init_redis_fallback(
-    circuit_config: Optional[CircuitBreakerConfig] = None,
-    fallback_config: Optional[FallbackConfig] = None,
+    circuit_config: CircuitBreakerConfig | None = None,
+    fallback_config: FallbackConfig | None = None,
 ) -> RedisFallbackManager:
     """初始化 Redis 降级管理器"""
     global _redis_fallback_manager

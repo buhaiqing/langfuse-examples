@@ -1,14 +1,15 @@
 """监控系统适配器"""
 
-from typing import Dict, Any, List
 from datetime import datetime, timedelta
+from typing import Any
+
 from utils.api_client import APIClient
 
 
 class PrometheusClient(APIClient):
     """Prometheus API 客户端"""
 
-    async def query(self, promql: str) -> Dict[str, Any]:
+    async def query(self, promql: str) -> dict[str, Any]:
         """执行 PromQL 查询"""
         return await self.get(
             "/api/v1/query",
@@ -17,7 +18,7 @@ class PrometheusClient(APIClient):
 
     async def query_range(
         self, promql: str, start: datetime, end: datetime, step: str = "5m"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """范围查询"""
         return await self.get(
             "/api/v1/query_range",
@@ -36,7 +37,7 @@ class MonitoringService:
     def __init__(self, prometheus_url: str = ""):
         self.prometheus = PrometheusClient(prometheus_url)
 
-    async def check_service_status(self, service_name: str) -> Dict[str, Any]:
+    async def check_service_status(self, service_name: str) -> dict[str, Any]:
         """
         检查服务状态
 
@@ -57,7 +58,7 @@ class MonitoringService:
             "timestamp": datetime.now().isoformat(),
         }
 
-    async def get_recent_alerts(self, hours: int = 24) -> List[Dict[str, Any]]:
+    async def get_recent_alerts(self, hours: int = 24) -> list[dict[str, Any]]:
         """
         获取最近告警
 

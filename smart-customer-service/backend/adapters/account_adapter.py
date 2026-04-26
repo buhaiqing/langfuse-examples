@@ -1,6 +1,6 @@
 """账户系统适配器"""
 
-from typing import Dict, Any
+from typing import Any
 
 from utils.api_client import APIClient
 
@@ -8,7 +8,7 @@ from utils.api_client import APIClient
 class AccountAPIClient(APIClient):
     """账户系统 API 客户端"""
 
-    async def check_account_status(self, user_id: str) -> Dict[str, Any]:
+    async def check_account_status(self, user_id: str) -> dict[str, Any]:
         """
         检查账户状态
 
@@ -20,7 +20,7 @@ class AccountAPIClient(APIClient):
         """
         return await self.get(f"/api/v1/accounts/{user_id}/status")
 
-    async def reset_password(self, user_id: str, channel: str = "email") -> Dict[str, Any]:
+    async def reset_password(self, user_id: str, channel: str = "email") -> dict[str, Any]:
         """
         重置密码
 
@@ -36,7 +36,7 @@ class AccountAPIClient(APIClient):
             json={"channel": channel},
         )
 
-    async def update_profile(self, user_id: str, profile_data: Dict[str, Any]) -> Dict[str, Any]:
+    async def update_profile(self, user_id: str, profile_data: dict[str, Any]) -> dict[str, Any]:
         """更新用户资料"""
         return await self.put(
             f"/api/v1/accounts/{user_id}/profile",
@@ -50,7 +50,7 @@ class AccountService:
     def __init__(self, base_url: str = ""):
         self.client = AccountAPIClient(base_url)
 
-    async def check_status(self, user_id: str) -> Dict[str, Any]:
+    async def check_status(self, user_id: str) -> dict[str, Any]:
         """检查账户状态"""
         return await self.client.check_account_status(user_id)
 

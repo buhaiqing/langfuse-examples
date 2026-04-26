@@ -10,10 +10,10 @@
 - 报表导出
 """
 
-from fastapi import APIRouter, Query, HTTPException
-from typing import Optional, List, Literal
-from pydantic import BaseModel, Field
+from typing import Literal
 
+from fastapi import APIRouter, Query
+from pydantic import BaseModel
 from services.analytics import analytics_service
 
 router = APIRouter(prefix="/analytics", tags=["数据分析"])
@@ -40,11 +40,11 @@ class IntentDistributionResponse(BaseModel):
 class AgentPerformanceResponse(BaseModel):
     """客服绩效响应"""
 
-    agent_id: Optional[str]
+    agent_id: str | None
     period: dict
-    metrics: Optional[dict]
-    agents: Optional[list]
-    summary: Optional[dict]
+    metrics: dict | None
+    agents: list | None
+    summary: dict | None
 
 
 class RealtimeMetricsResponse(BaseModel):
@@ -73,7 +73,7 @@ async def get_intent_distribution(
 
 @router.get("/agent-performance", response_model=AgentPerformanceResponse)
 async def get_agent_performance(
-    agent_id: Optional[str] = Query(default=None, description="客服 ID"),
+    agent_id: str | None = Query(default=None, description="客服 ID"),
     days: int = Query(default=7, ge=1, le=90, description="统计天数"),
 ):
     """获取客服绩效统计"""

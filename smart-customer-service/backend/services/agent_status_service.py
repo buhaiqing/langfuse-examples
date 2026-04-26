@@ -9,19 +9,19 @@
 - 状态变更广播通知
 """
 
-import asyncio
 import json
 import logging
-from typing import Dict, Any, List, Optional
-from datetime import datetime, timedelta
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta
 from enum import Enum
+from typing import Any
 
-from storage.redis_client import redis_client, RedisKeys
+from storage.redis_client import redis_client
 from storage.redis_fallback import get_redis_fallback_manager
+from utils import utcnow
+
 from services.websocket_sync import (
     get_ws_sync_service,
-    WSMessageType,
 )
 
 logger = logging.getLogger(__name__)
@@ -30,49 +30,54 @@ logger = logging.getLogger(__name__)
 # ==================== 状态定义 ====================
 class AgentStatus(str, Enum):
     """客服状态"""
-    ONLINE = "online"       # 在线可用
-    BUSY = "busy"           # 繁忙（并发达到上限）
-    AWAY = "away"           # 暂时离开
-    OFFLINE = "offline"     # 离线
-    BREAK = "break"         # 休息
+
+    ONLINE = "online"  # 在线可用
+    BUSY = "busy"  # 繁忙（并发达到上限）
+    AWAY = "away"  # 暂时离开
+    OFFLINE = "offline"  # 离线
+    BREAK = "break"  # 休息
 
 
 class AgentRole(str, Enum):
     """客服角色"""
-    GENERAL = "general"     # 通用客服
-    TECH = "technical"      # 技术客服
-    VIP = "vip"             # VIP 专属客服
+
+    GENERAL = "general"  # 通用客服
+    TECH = "technical"  # 技术客服
+    VIP = "vip"  # VIP 专属客服
     SUPERVISOR = "supervisor"  # 主管
 
 
 @dataclass
 class AgentInfo:
     """客服信息"""
+
     agent_id: str
     name: str
     role: AgentRole = AgentRole.GENERAL
     status: AgentStatus = AgentStatus.OFFLINE
     concurrent_chats: int = 0
     max_concurrent_chats: int = 5
-    skills: List[str] = field(default_factory=list)
-    department: Optional[str] = None
-    email: Optional[str] = None
+    skills: list[str] = field(default_factory=list)
+    department: str | None = None
+    email: str | None = None
 
 
 @dataclass
 class AgentStatusChange:
     """客服状态变更记录"""
+
     agent_id: str
     old_status: AgentStatus
     new_status: AgentStatus
-    reason: Optional[str] = None
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    session_id: Optional[str] = None  # 关联的会话ID（如果有）
+    reason: str | None = None
+    timestamp: str = field(default_factory=lambda: utcnow().isoformat())
+    session_id: str | None = None  # 关联的会话ID（如果有）
 
 
 @dataclass
 class AgentPerformance:
     """客服绩效"""
+
     agent_id: str
     period_start: datetime
     period_end: datetime
@@ -133,9 +138,9 @@ class AgentStatusService:
         self,
         agent_id: str,
         status: AgentStatus,
-        concurrent_chats: Optional[int] = None,
-        reason: Optional[str] = None,
-        session_id: Optional[str] = None,
+        concurrent_chats: int | None = None,
+        reason: str | None = None,
+        session_id: str | None = None,
     ) -> bool:
         """
         设置客服状态
@@ -156,16 +161,14 @@ class AgentStatusService:
 
         # 2. 检查状态转换是否合法
         if not self._is_valid_status_transition(old_status, status.value):
-            logger.warning(
-                f"客服 {agent_id} 状态转换不合法: {old_status} -> {status.value}"
-            )
+            logger.warning(f"客服 {agent_id} 状态转换不合法: {old_status} -> {status.value}")
             return False
 
         # 3. 更新 Redis
         status_data = {
             "status": status.value,
             "concurrent_chats": concurrent_chats or current_status.get("concurrent_chats", 0),
-            "updated_at": datetime.utcnow().isoformat(),
+            "updated_at": utcnow().isoformat(),
         }
 
         await self._fallback_manager.execute_with_fallback(
@@ -175,9 +178,7 @@ class AgentStatusService:
         )
 
         # 4. 记录历史
-        await self._record_status_change(
-            agent_id, old_status, status.value, reason, session_id
-        )
+        await self._record_status_change(agent_id, old_status, status.value, reason, session_id)
 
         # 5. 广播状态变更
         if self._ws_sync:
@@ -194,7 +195,7 @@ class AgentStatusService:
 
         return True
 
-    async def _update_status_in_redis(self, agent_id: str, status_data: Dict[str, Any]):
+    async def _update_status_in_redis(self, agent_id: str, status_data: dict[str, Any]):
         """更新 Redis 中的客服状态"""
         key = self.KEY_AGENT_STATUS.format(agent_id=agent_id)
 
@@ -221,8 +222,8 @@ class AgentStatusService:
         agent_id: str,
         old_status: str,
         new_status: str,
-        reason: Optional[str],
-        session_id: Optional[str],
+        reason: str | None,
+        session_id: str | None,
     ):
         """记录状态变更历史"""
         history_key = self.KEY_AGENT_HISTORY.format(agent_id=agent_id)
@@ -238,14 +239,16 @@ class AgentStatusService:
         # 添加到列表
         await redis_client._client.lpush(
             history_key,
-            json.dumps({
-                "agent_id": change_record.agent_id,
-                "old_status": change_record.old_status.value,
-                "new_status": change_record.new_status.value,
-                "reason": change_record.reason,
-                "session_id": change_record.session_id,
-                "timestamp": change_record.timestamp,
-            }),
+            json.dumps(
+                {
+                    "agent_id": change_record.agent_id,
+                    "old_status": change_record.old_status.value,
+                    "new_status": change_record.new_status.value,
+                    "reason": change_record.reason,
+                    "session_id": change_record.session_id,
+                    "timestamp": change_record.timestamp,
+                }
+            ),
         )
 
         # 限制历史记录数量
@@ -259,17 +262,25 @@ class AgentStatusService:
         # 合法转换矩阵
         valid_transitions = {
             AgentStatus.OFFLINE.value: [AgentStatus.ONLINE.value, AgentStatus.BREAK.value],
-            AgentStatus.ONLINE.value: [AgentStatus.BUSY.value, AgentStatus.AWAY.value,
-                                        AgentStatus.OFFLINE.value, AgentStatus.BREAK.value],
-            AgentStatus.BUSY.value: [AgentStatus.ONLINE.value, AgentStatus.AWAY.value,
-                                       AgentStatus.OFFLINE.value, AgentStatus.BREAK.value],
+            AgentStatus.ONLINE.value: [
+                AgentStatus.BUSY.value,
+                AgentStatus.AWAY.value,
+                AgentStatus.OFFLINE.value,
+                AgentStatus.BREAK.value,
+            ],
+            AgentStatus.BUSY.value: [
+                AgentStatus.ONLINE.value,
+                AgentStatus.AWAY.value,
+                AgentStatus.OFFLINE.value,
+                AgentStatus.BREAK.value,
+            ],
             AgentStatus.AWAY.value: [AgentStatus.ONLINE.value, AgentStatus.OFFLINE.value],
             AgentStatus.BREAK.value: [AgentStatus.ONLINE.value, AgentStatus.OFFLINE.value],
         }
 
         return new_status in valid_transitions.get(old_status, [])
 
-    async def get_agent_status(self, agent_id: str) -> Dict[str, Any]:
+    async def get_agent_status(self, agent_id: str) -> dict[str, Any]:
         """获取客服状态"""
         key = self.KEY_AGENT_STATUS.format(agent_id=agent_id)
 
@@ -297,7 +308,7 @@ class AgentStatusService:
 
         return {"status": AgentStatus.OFFLINE.value, "concurrent_chats": 0}
 
-    async def get_all_online_agents(self) -> List[Dict[str, Any]]:
+    async def get_all_online_agents(self) -> list[dict[str, Any]]:
         """获取所有在线客服"""
         agent_ids = await redis_client._client.smembers(self.KEY_ALL_AGENTS)
 
@@ -308,20 +319,22 @@ class AgentStatusService:
 
             status = await self.get_agent_status(agent_id)
             if status.get("status") == AgentStatus.ONLINE.value:
-                online_agents.append({
-                    "agent_id": agent_id,
-                    "status": status.get("status"),
-                    "concurrent_chats": status.get("concurrent_chats", 0),
-                    "updated_at": status.get("updated_at"),
-                })
+                online_agents.append(
+                    {
+                        "agent_id": agent_id,
+                        "status": status.get("status"),
+                        "concurrent_chats": status.get("concurrent_chats", 0),
+                        "updated_at": status.get("updated_at"),
+                    }
+                )
 
         return online_agents
 
     async def get_available_agents(
         self,
         min_capacity: int = 1,
-        skills: Optional[List[str]] = None,
-    ) -> List[str]:
+        skills: list[str] | None = None,
+    ) -> list[str]:
         """
         获取可用客服列表
 
@@ -380,8 +393,7 @@ class AgentStatusService:
         # 2. 更新并发数
         new_concurrent = current_chats + 1
         new_status = (
-            AgentStatus.BUSY.value if new_concurrent >= max_chats
-            else AgentStatus.ONLINE.value
+            AgentStatus.BUSY.value if new_concurrent >= max_chats else AgentStatus.ONLINE.value
         )
 
         await self.set_agent_status(
@@ -441,7 +453,7 @@ class AgentStatusService:
         self,
         agent_id: str,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """获取客服状态变更历史"""
         history_key = self.KEY_AGENT_HISTORY.format(agent_id=agent_id)
 
@@ -458,13 +470,11 @@ class AgentStatusService:
     async def record_performance(
         self,
         agent_id: str,
-        metrics: Dict[str, Any],
+        metrics: dict[str, Any],
     ):
         """记录客服绩效指标"""
-        date_str = datetime.utcnow().strftime("%Y-%m-%d")
-        stats_key = self.KEY_AGENT_STATS_DAILY.format(
-            agent_id=agent_id, date=date_str
-        )
+        date_str = utcnow().strftime("%Y-%m-%d")
+        stats_key = self.KEY_AGENT_STATS_DAILY.format(agent_id=agent_id, date=date_str)
 
         # 增加各项指标
         for metric_name, value in metrics.items():
@@ -477,9 +487,9 @@ class AgentStatusService:
         self,
         agent_id: str,
         days: int = 7,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """获取客服绩效统计"""
-        end_date = datetime.utcnow()
+        end_date = utcnow()
         start_date = end_date - timedelta(days=days)
 
         performance = AgentPerformance(
@@ -492,9 +502,7 @@ class AgentStatusService:
         current_date = start_date
         while current_date <= end_date:
             date_str = current_date.strftime("%Y-%m-%d")
-            stats_key = self.KEY_AGENT_STATS_DAILY.format(
-                agent_id=agent_id, date=date_str
-            )
+            stats_key = self.KEY_AGENT_STATS_DAILY.format(agent_id=agent_id, date=date_str)
 
             daily_stats = await redis_client._client.hgetall(stats_key)
 
@@ -525,7 +533,8 @@ class AgentStatusService:
                 "escalated": performance.escalated_sessions,
                 "resolution_rate": (
                     performance.resolved_sessions / performance.total_sessions * 100
-                    if performance.total_sessions > 0 else 0
+                    if performance.total_sessions > 0
+                    else 0
                 ),
             },
             "messages": {
@@ -540,7 +549,7 @@ class AgentStatusService:
     async def get_all_agents_performance(
         self,
         days: int = 7,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """获取所有客服绩效"""
         agent_ids = await redis_client._client.smembers(self.KEY_ALL_AGENTS)
 
@@ -556,7 +565,7 @@ class AgentStatusService:
 
 
 # ==================== 全局实例 ====================
-_agent_status_service: Optional[AgentStatusService] = None
+_agent_status_service: AgentStatusService | None = None
 
 
 def get_agent_status_service() -> AgentStatusService:

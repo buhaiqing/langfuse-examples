@@ -11,15 +11,13 @@ WebSocket Redis Pub/Sub 集成模块
 import asyncio
 import json
 import logging
-from typing import Dict, Any, Optional, Set, Callable
-from datetime import datetime
+from collections.abc import Callable
 from dataclasses import dataclass, field
+from typing import Any
 
 import redis.asyncio as redis
-from redis.asyncio import Redis
-
-from core.config import settings
-from storage.redis_client import redis_client, RedisKeys
+from storage.redis_client import redis_client
+from utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -27,6 +25,7 @@ logger = logging.getLogger(__name__)
 # ==================== 消息类型定义 ====================
 class WSMessageType:
     """WebSocket 消息类型"""
+
     # 连接管理
     CONNECT = "connect"
     DISCONNECT = "disconnect"
@@ -52,12 +51,13 @@ class WSMessageType:
 @dataclass
 class PubSubMessage:
     """Pub/Sub 消息结构"""
+
     type: str
-    payload: Dict[str, Any]
+    payload: dict[str, Any]
     source_instance: str  # 来源实例标识
-    target: Optional[str] = None  # 目标客户端ID（定向发送）
-    timestamp: str = field(default_factory=lambda: datetime.utcnow().isoformat())
-    message_id: Optional[str] = None
+    target: str | None = None  # 目标客户端ID（定向发送）
+    timestamp: str = field(default_factory=lambda: utcnow().isoformat())
+    message_id: str | None = None
 
 
 # ==================== Redis Pub/Sub 管理器 ====================
@@ -69,19 +69,19 @@ class RedisPubSubManager:
     """
 
     CHANNEL_AGENT = "ws:channel:agents"  # 客服频道
-    CHANNEL_USER = "ws:channel:users"    # 用户频道
-    CHANNEL_ALL = "ws:channel:all"       # 全局频道
+    CHANNEL_USER = "ws:channel:users"  # 用户频道
+    CHANNEL_ALL = "ws:channel:all"  # 全局频道
 
     def __init__(self, instance_id: str = "default"):
         self.instance_id = instance_id
-        self._pubsub: Optional[redis.client.PubSub] = None
-        self._subscriber_task: Optional[asyncio.Task] = None
-        self._message_handlers: Dict[str, Callable] = {}
+        self._pubsub: redis.client.PubSub | None = None
+        self._subscriber_task: asyncio.Task | None = None
+        self._message_handlers: dict[str, Callable] = {}
         self._connected = False
         self._lock = asyncio.Lock()
 
         # 本地连接缓存（用于消息路由）
-        self._local_connections: Dict[str, Any] = {}
+        self._local_connections: dict[str, Any] = {}
 
     async def connect(self) -> bool:
         """连接 Redis Pub/Sub"""
@@ -107,9 +107,7 @@ class RedisPubSubManager:
                 )
 
                 # 启动消息监听任务
-                self._subscriber_task = asyncio.create_task(
-                    self._message_listener()
-                )
+                self._subscriber_task = asyncio.create_task(self._message_listener())
 
                 self._connected = True
                 logger.info(f"Redis Pub/Sub 连接成功 (instance: {self.instance_id})")
@@ -152,8 +150,7 @@ class RedisPubSubManager:
         while self._connected and self._pubsub:
             try:
                 message = await self._pubsub.get_message(
-                    ignore_subscribe_messages=True,
-                    timeout=1.0
+                    ignore_subscribe_messages=True, timeout=1.0
                 )
 
                 if message:
@@ -173,7 +170,7 @@ class RedisPubSubManager:
         await self.disconnect()
         await self.connect()
 
-    async def _handle_pubsub_message(self, message: Dict):
+    async def _handle_pubsub_message(self, message: dict):
         """处理 Pub/Sub 消息"""
         if message["type"] != "message":
             return
@@ -224,11 +221,13 @@ class RedisPubSubManager:
         connection = self._local_connections.get(client_id)
         if connection:
             try:
-                await connection.send_json({
-                    "type": msg.type,
-                    "payload": msg.payload,
-                    "timestamp": msg.timestamp,
-                })
+                await connection.send_json(
+                    {
+                        "type": msg.type,
+                        "payload": msg.payload,
+                        "timestamp": msg.timestamp,
+                    }
+                )
             except Exception as e:
                 logger.warning(f"发送消息到本地连接失败: {e}")
 
@@ -249,11 +248,13 @@ class RedisPubSubManager:
             try:
                 connection = connection_info.get("connection")
                 if connection:
-                    await connection.send_json({
-                        "type": msg.type,
-                        "payload": msg.payload,
-                        "timestamp": msg.timestamp,
-                    })
+                    await connection.send_json(
+                        {
+                            "type": msg.type,
+                            "payload": msg.payload,
+                            "timestamp": msg.timestamp,
+                        }
+                    )
             except Exception as e:
                 logger.warning(f"广播到本地连接失败 {client_id}: {e}")
 
@@ -267,19 +268,19 @@ class RedisPubSubManager:
 
     # ==================== 发布消息 ====================
 
-    async def publish_to_agents(self, msg_type: str, payload: Dict[str, Any]) -> int:
+    async def publish_to_agents(self, msg_type: str, payload: dict[str, Any]) -> int:
         """发布消息到客服频道"""
         return await self._publish(self.CHANNEL_AGENT, msg_type, payload)
 
-    async def publish_to_users(self, msg_type: str, payload: Dict[str, Any]) -> int:
+    async def publish_to_users(self, msg_type: str, payload: dict[str, Any]) -> int:
         """发布消息到用户频道"""
         return await self._publish(self.CHANNEL_USER, msg_type, payload)
 
-    async def publish_to_all(self, msg_type: str, payload: Dict[str, Any]) -> int:
+    async def publish_to_all(self, msg_type: str, payload: dict[str, Any]) -> int:
         """发布消息到全局频道"""
         return await self._publish(self.CHANNEL_ALL, msg_type, payload)
 
-    async def publish_direct(self, target: str, msg_type: str, payload: Dict[str, Any]) -> int:
+    async def publish_direct(self, target: str, msg_type: str, payload: dict[str, Any]) -> int:
         """定向发布消息到特定客户端"""
         return await self._publish(self.CHANNEL_ALL, msg_type, payload, target=target)
 
@@ -287,8 +288,8 @@ class RedisPubSubManager:
         self,
         channel: str,
         msg_type: str,
-        payload: Dict[str, Any],
-        target: Optional[str] = None,
+        payload: dict[str, Any],
+        target: str | None = None,
     ) -> int:
         """发布消息"""
         if not self._connected:
@@ -309,14 +310,16 @@ class RedisPubSubManager:
             )
 
             # 发布
-            message_json = json.dumps({
-                "type": msg.type,
-                "payload": msg.payload,
-                "source_instance": msg.source_instance,
-                "target": msg.target,
-                "timestamp": msg.timestamp,
-                "message_id": msg.message_id,
-            })
+            message_json = json.dumps(
+                {
+                    "type": msg.type,
+                    "payload": msg.payload,
+                    "source_instance": msg.source_instance,
+                    "target": msg.target,
+                    "timestamp": msg.timestamp,
+                    "message_id": msg.message_id,
+                }
+            )
 
             result = await client.publish(channel, message_json)
             logger.debug(f"发布消息到 {channel}: {msg_type}, 收到 {result} 个订阅者")
@@ -339,7 +342,7 @@ class RedisPubSubManager:
         self._local_connections[client_id] = {
             "connection": connection,
             "type": connection_type,
-            "connected_at": datetime.utcnow().isoformat(),
+            "connected_at": utcnow().isoformat(),
         }
         logger.debug(f"注册本地连接: {client_id} ({connection_type})")
 
@@ -348,16 +351,17 @@ class RedisPubSubManager:
         self._local_connections.pop(client_id, None)
         logger.debug(f"取消注册本地连接: {client_id}")
 
-    def get_local_connections_count(self, connection_type: Optional[str] = None) -> int:
+    def get_local_connections_count(self, connection_type: str | None = None) -> int:
         """获取本地连接数量"""
         if connection_type:
             return sum(
-                1 for info in self._local_connections.values()
+                1
+                for info in self._local_connections.values()
                 if info.get("type") == connection_type
             )
         return len(self._local_connections)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """获取统计信息"""
         return {
             "instance_id": self.instance_id,
@@ -387,17 +391,12 @@ class WebSocketSyncService:
     def _register_default_handlers(self):
         """注册默认消息处理器"""
         self.pubsub_manager.register_handler(
-            WSMessageType.AGENT_STATUS_UPDATE,
-            self._handle_agent_status_update
+            WSMessageType.AGENT_STATUS_UPDATE, self._handle_agent_status_update
         )
         self.pubsub_manager.register_handler(
-            WSMessageType.ESCALATION_REQUEST,
-            self._handle_escalation_request
+            WSMessageType.ESCALATION_REQUEST, self._handle_escalation_request
         )
-        self.pubsub_manager.register_handler(
-            WSMessageType.NEW_MESSAGE,
-            self._handle_new_message
-        )
+        self.pubsub_manager.register_handler(WSMessageType.NEW_MESSAGE, self._handle_new_message)
 
     async def initialize(self) -> bool:
         """初始化同步服务"""
@@ -416,7 +415,7 @@ class WebSocketSyncService:
         await self.pubsub_manager.disconnect()
         self._initialized = False
 
-    async def _handle_agent_status_update(self, payload: Dict, source: str):
+    async def _handle_agent_status_update(self, payload: dict, source: str):
         """处理客服状态更新"""
         logger.info(f"收到客服状态更新 (from {source}): {payload}")
         # 更新 Redis 中客服状态
@@ -428,7 +427,7 @@ class WebSocketSyncService:
                 concurrent_chats=payload.get("concurrent_chats", 0),
             )
 
-    async def _handle_escalation_request(self, payload: Dict, source: str):
+    async def _handle_escalation_request(self, payload: dict, source: str):
         """处理升级请求"""
         logger.info(f"收到升级请求 (from {source}): {payload}")
         # 添加到升级队列
@@ -437,7 +436,7 @@ class WebSocketSyncService:
         if session_id:
             await redis_client.add_to_escalation_queue(session_id, priority_score)
 
-    async def _handle_new_message(self, payload: Dict, source: str):
+    async def _handle_new_message(self, payload: dict, source: str):
         """处理新消息"""
         logger.debug(f"收到新消息通知 (from {source}): {payload}")
 
@@ -456,7 +455,7 @@ class WebSocketSyncService:
                 "agent_id": agent_id,
                 "status": status,
                 "concurrent_chats": concurrent_chats,
-            }
+            },
         )
 
     async def broadcast_escalation_request(
@@ -474,7 +473,7 @@ class WebSocketSyncService:
                 "priority_score": priority_score,
                 "priority_level": priority_level,
                 "trigger_reasons": trigger_reasons,
-            }
+            },
         )
 
     async def broadcast_new_message(
@@ -490,15 +489,15 @@ class WebSocketSyncService:
                 "session_id": session_id,
                 "message_type": message_type,
                 "content": content,
-                "timestamp": datetime.utcnow().isoformat(),
-            }
+                "timestamp": utcnow().isoformat(),
+            },
         )
 
     async def notify_user(
         self,
         user_id: str,
         msg_type: str,
-        payload: Dict[str, Any],
+        payload: dict[str, Any],
     ):
         """通知特定用户"""
         await self.pubsub_manager.publish_direct(
@@ -515,21 +514,19 @@ class WebSocketSyncService:
     ):
         """注册 WebSocket 连接"""
         connection_type = "agent" if is_agent else "user"
-        self.pubsub_manager.register_local_connection(
-            client_id, connection, connection_type
-        )
+        self.pubsub_manager.register_local_connection(client_id, connection, connection_type)
 
     def unregister_connection(self, client_id: str):
         """取消注册 WebSocket 连接"""
         self.pubsub_manager.unregister_local_connection(client_id)
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """获取同步服务状态"""
         return self.pubsub_manager.get_stats()
 
 
 # ==================== 全局实例 ====================
-_ws_sync_service: Optional[WebSocketSyncService] = None
+_ws_sync_service: WebSocketSyncService | None = None
 
 
 def get_ws_sync_service(instance_id: str = "default") -> WebSocketSyncService:

@@ -1,16 +1,16 @@
 """RAG 知识库服务"""
 
-from typing import List, Dict, Any, Optional
 from dataclasses import dataclass
+from typing import Any
 
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
-from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import StrOutputParser
-from core.config import settings
-from storage.chroma_client import chroma_client
 from core.langfuse_client import create_span, score_trace
+from core.llm_client_pool import get_chat_client, get_embedding_client
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate
+from storage.chroma_client import chroma_client
+
+from services.rag_document_importer import document_import_engine
 from services.rag_query_rewriter import query_rewriter
-from services.rag_document_importer import document_import_engine, ImportResult
 
 
 @dataclass
@@ -18,17 +18,17 @@ class RAGQueryResult:
     """RAG 查询结果"""
 
     answer: str
-    documents: List[Dict[str, Any]]
+    documents: list[dict[str, Any]]
     confidence: float
-    sources: List[str]
+    sources: list[str]
 
 
 class RAGService:
     """RAG 知识库服务"""
 
     def __init__(self):
-        self.llm = ChatOpenAI(model=settings.openai_model, temperature=0.1)
-        self.embeddings = OpenAIEmbeddings(model=settings.openai_embedding_model)
+        self.llm = get_chat_client(temperature=0.1)
+        self.embeddings = get_embedding_client()
 
         # RAG 提示词模板
         self.rag_prompt = ChatPromptTemplate.from_messages(
@@ -57,8 +57,8 @@ class RAGService:
         self,
         query: str,
         top_k: int = 3,
-        filters: Optional[Dict[str, Any]] = None,
-        session_id: Optional[str] = None,
+        filters: dict[str, Any] | None = None,
+        session_id: str | None = None,
     ) -> RAGQueryResult:
         """RAG 查询主方法"""
 
@@ -110,7 +110,7 @@ class RAGService:
         self,
         query: str,
         top_k: int = 3,
-        filters: Optional[Dict[str, Any]] = None,
+        filters: dict[str, Any] | None = None,
     ):
         """检索相关文档"""
         # TODO: 实现混合检索 (向量 + BM25)
@@ -122,11 +122,12 @@ class RAGService:
         )
         return results
 
-    def _build_context(self, documents: List) -> str:
+    def _build_context(self, documents: list) -> str:
         """构建上下文"""
         context_parts = []
         for i, doc in enumerate(documents, 1):
-            context_parts.append(f"[文档{i}]: {doc.page_content}")
+            content = getattr(doc, "content", None) or getattr(doc, "page_content", str(doc))
+            context_parts.append(f"[文档{i}]: {content}")
 
         return "\n\n".join(context_parts)
 
@@ -139,7 +140,7 @@ class RAGService:
             }
         )
 
-    async def import_documents(self, file_paths: List[str], metadata: Optional[Dict] = None):
+    async def import_documents(self, file_paths: list[str], metadata: dict | None = None):
         """添加文档到知识库"""
         with create_span("document_import"):
             result = await document_import_engine.import_files(file_paths, metadata)
@@ -150,7 +151,7 @@ class RAGService:
 
             return result
 
-    def delete_documents(self, doc_ids: List[str]):
+    def delete_documents(self, doc_ids: list[str]):
         """删除文档"""
         chroma_client.delete_documents(doc_ids)
 

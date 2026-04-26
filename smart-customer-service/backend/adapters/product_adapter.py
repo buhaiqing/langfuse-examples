@@ -1,19 +1,20 @@
 """产品信息系统适配器"""
 
-from typing import Dict, Any, Optional
+from typing import Any
+
 import aioredis
-from utils.api_client import APIClient
 from core.config import settings
+from utils.api_client import APIClient
 
 
 class ProductAPIClient(APIClient):
     """产品信息系统 API 客户端"""
 
-    async def get_product_info(self, product_name: str) -> Dict[str, Any]:
+    async def get_product_info(self, product_name: str) -> dict[str, Any]:
         """获取产品信息"""
         return await self.get(f"/api/v1/products/{product_name}")
 
-    async def get_pricing_info(self, product_id: str) -> Dict[str, Any]:
+    async def get_pricing_info(self, product_id: str) -> dict[str, Any]:
         """获取定价信息"""
         return await self.get(f"/api/v1/products/{product_id}/pricing")
 
@@ -23,7 +24,7 @@ class ProductService:
 
     def __init__(self, base_url: str = ""):
         self.client = ProductAPIClient(base_url)
-        self.redis: Optional[aioredis.Redis] = None
+        self.redis: aioredis.Redis | None = None
 
     async def connect_redis(self):
         """连接 Redis"""
@@ -31,7 +32,7 @@ class ProductService:
             f"redis://{settings.redis_host}:{settings.redis_port}/{settings.redis_db}"
         )
 
-    async def get_product_info(self, product_name: str) -> Dict[str, Any]:
+    async def get_product_info(self, product_name: str) -> dict[str, Any]:
         """获取产品信息（带缓存）"""
         cache_key = f"product:{product_name}:info"
 

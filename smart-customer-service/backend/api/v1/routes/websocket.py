@@ -4,13 +4,13 @@ WebSocket API 路由
 提供 WebSocket 连接端点和相关 HTTP 接口
 """
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect, Query, HTTPException
-from typing import Optional
 import logging
-import jwt
 
-from api.websocket_handler import websocket_handler, websocket_manager, start_heartbeat_checker
+import jwt
 from core.config import settings
+from fastapi import APIRouter, HTTPException, Query, WebSocket, WebSocketDisconnect
+
+from api.websocket_handler import start_heartbeat_checker, websocket_handler, websocket_manager
 
 logger = logging.getLogger(__name__)
 
@@ -34,16 +34,16 @@ async def verify_websocket_token(token: str) -> dict:
         payload = jwt.decode(token, settings.jwt_secret_key, algorithms=[settings.jwt_algorithm])
         return payload
     except jwt.ExpiredSignatureError:
-        raise HTTPException(status_code=401, detail="Token has expired")
+        raise HTTPException(status_code=401, detail="Token has expired") from None
     except jwt.InvalidTokenError as e:
-        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}")
+        raise HTTPException(status_code=401, detail=f"Invalid token: {str(e)}") from e
 
 
 @router.websocket("/ws/agent")
 async def agent_websocket_endpoint(
     websocket: WebSocket,
     token: str = Query(..., description="JWT Token 用于身份验证"),
-    client_id: str = Query(..., description="客服客户端 ID")
+    client_id: str = Query(..., description="客服客户端 ID"),
 ):
     """
     客服 WebSocket 连接端点
@@ -63,7 +63,9 @@ async def agent_websocket_endpoint(
         # 检查是否有客服权限
         scopes = payload.get("scopes", [])
         if "agent" not in scopes:
-            await websocket.close(code=1008, reason="Insufficient permissions: agent scope required")
+            await websocket.close(
+                code=1008, reason="Insufficient permissions: agent scope required"
+            )
             return
 
         await websocket_handler(websocket, client_id, is_agent)
@@ -79,7 +81,7 @@ async def agent_websocket_endpoint(
 async def user_websocket_endpoint(
     websocket: WebSocket,
     token: str = Query(..., description="JWT Token 用于身份验证"),
-    client_id: str = Query(..., description="用户客户端 ID")
+    client_id: str = Query(..., description="用户客户端 ID"),
 ):
     """
     用户 WebSocket 连接端点
@@ -127,7 +129,7 @@ async def get_websocket_stats():
 async def session_websocket_endpoint(
     websocket: WebSocket,
     session_id: str,
-    token: str = Query(..., description="JWT Token 用于身份验证")
+    token: str = Query(..., description="JWT Token 用于身份验证"),
 ):
     """
     会话专用 WebSocket 端点
@@ -138,7 +140,6 @@ async def session_websocket_endpoint(
         session_id: 会话 ID
         token: JWT Token（必需）
     """
-    client_id = f"session:{session_id}"
 
     try:
         # 验证 JWT Token
@@ -159,7 +160,7 @@ async def session_websocket_endpoint(
         )
 
         while True:
-            data = await websocket.receive_text()
+            await websocket.receive_text()
             # 转发到会话相关方
             # TODO: 实现消息转发
 

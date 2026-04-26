@@ -1,29 +1,28 @@
 """文档导入与分块引擎"""
 
-from typing import List, Optional, Dict, Any
-from pathlib import Path
 import hashlib
 from dataclasses import dataclass, field
+from pathlib import Path
+from typing import Any
 
-from langchain_text_splitters import RecursiveCharacterTextSplitter, MarkdownTextSplitter
 from langchain_community.document_loaders import (
-    PyPDFLoader,
     Docx2txtLoader,
-    UnstructuredHTMLLoader,
+    PyPDFLoader,
     TextLoader,
+    UnstructuredHTMLLoader,
 )
 from langchain_core.documents import Document
-from core.config import settings
+from langchain_text_splitters import MarkdownTextSplitter, RecursiveCharacterTextSplitter
 
 
 @dataclass
 class ImportResult:
     """文档导入结果"""
 
-    documents: List[Document]
+    documents: list[Document]
     total_chunks: int
-    failed_files: List[str]
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    failed_files: list[str]
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class DocumentImportEngine:
@@ -55,8 +54,8 @@ class DocumentImportEngine:
 
     async def import_files(
         self,
-        file_paths: List[str],
-        metadata: Optional[Dict[str, Any]] = None,
+        file_paths: list[str],
+        metadata: dict[str, Any] | None = None,
     ) -> ImportResult:
         """
         导入文件
@@ -101,7 +100,7 @@ class DocumentImportEngine:
             },
         )
 
-    async def _load_file(self, file_path: str) -> List[Document]:
+    async def _load_file(self, file_path: str) -> list[Document]:
         """加载单个文件"""
         path = Path(file_path)
         ext = path.suffix.lower()
@@ -122,7 +121,7 @@ class DocumentImportEngine:
         loader = loader_class(file_path)
         return await loader.aload()
 
-    def _split_document(self, doc: Document) -> List[Document]:
+    def _split_document(self, doc: Document) -> list[Document]:
         """
         分块文档
 

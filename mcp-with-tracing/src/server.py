@@ -3,6 +3,9 @@ MCP Server entry point.
 """
 
 import asyncio
+import logging
+from typing import Optional
+
 from fastmcp import FastMCP
 
 from src.observability import (
@@ -21,6 +24,8 @@ from src.observability.alert_config_loader import load_alert_rules
 from src.observability.alert_monitor import start_alert_monitor
 from src.observability.smart_alerting import SmartAlertManager
 
+logger = logging.getLogger(__name__)
+
 mcp = FastMCP("MCP Langfuse Observability Server")
 
 
@@ -33,7 +38,7 @@ mcp = FastMCP("MCP Langfuse Observability Server")
 @observe_tool(name="submit_feedback_accept")
 def submit_feedback_accept(
     trace_id: str,
-    comment: str = None,
+    comment: Optional[str] = None,
 ) -> dict:
     """
     Submit positive feedback (accept) for a response.
@@ -62,8 +67,8 @@ def submit_feedback_accept(
 @observe_tool(name="submit_feedback_reject")
 def submit_feedback_reject(
     trace_id: str,
-    reason: str = None,
-    comment: str = None,
+    reason: Optional[str] = None,
+    comment: Optional[str] = None,
 ) -> dict:
     """
     Submit negative feedback (reject) for a response.
@@ -95,7 +100,7 @@ def submit_feedback_reject(
 def submit_feedback_rating(
     trace_id: str,
     rating: int,
-    comment: str = None,
+    comment: Optional[str] = None,
 ) -> dict:
     """
     Submit a rating (1-5) for a response.
@@ -157,56 +162,52 @@ def submit_feedback_comment(
     }
 
 
-def main():
+def main() -> None:
     """Run the MCP server."""
+    logging.basicConfig(
+        level=logging.INFO,
+        format="%(asctime)s [%(levelname)s] %(name)s: %(message)s",
+    )
+
     config = ObservabilityConfig()
     init_observability(config)
 
-    # Load alert rules from configuration file
-    print("\n" + "=" * 60)
-    print("Loading alert rules...")
-    print("=" * 60)
+    logger.info("Loading alert rules...")
     try:
         rules_count = load_alert_rules()
         if rules_count == 0:
-            print("⚠️  No alert rules loaded. Use API or scripts to configure alerts.")
+            logger.warning("No alert rules loaded. Use API or scripts to configure alerts.")
     except Exception as e:
-        print(f"❌ Failed to load alert rules: {e}")
-        print("   Server will start without alert rules.")
-    print("=" * 60 + "\n")
+        logger.error("Failed to load alert rules: %s", e)
+        logger.info("Server will start without alert rules.")
 
-    # Start background alert monitoring (Phase 5: Rule-based)
-    print("=" * 60)
-    print("Starting rule-based alert monitoring...")
-    print("=" * 60)
+    logger.info("Starting rule-based alert monitoring...")
     try:
         import os
 
         check_interval = int(os.getenv("ALERT_CHECK_INTERVAL_MINUTES", "5"))
         monitor = start_alert_monitor(check_interval_minutes=check_interval)
-        print(f"✅ Rule-based alert monitoring enabled (every {check_interval} minutes)")
+        logger.info("Rule-based alert monitoring enabled (every %d minutes)", check_interval)
     except Exception as e:
-        print(f"❌ Failed to start rule-based alert monitor: {e}")
-        print("   Server will run without automatic rule-based alert checking.")
-    print("=" * 60 + "\n")
+        logger.error("Failed to start rule-based alert monitor: %s", e)
+        logger.info("Server will run without automatic rule-based alert checking.")
 
-    # Start smart ML-based anomaly detection (Phase 6)
-    print("=" * 60)
-    print("Starting smart ML-based anomaly detection...")
-    print("=" * 60)
+    logger.info("Starting smart ML-based anomaly detection...")
     try:
         smart_check_interval = int(os.getenv("SMART_ALERT_CHECK_INTERVAL_MINUTES", "10"))
         smart_manager = SmartAlertManager(detection_interval_minutes=smart_check_interval)
         smart_manager.start_monitoring()
-        print(f"✅ Smart ML anomaly detection enabled (every {smart_check_interval} minutes)")
-        print(f"   - Prophet time series forecasting")
-        print(f"   - PyOD multivariate anomaly detection")
-        print(f"   - Auto-detects: success_rate, latency_p95, request_rate, satisfaction")
+        logger.info(
+            "Smart ML anomaly detection enabled (every %d minutes) - "
+            "Prophet time series + PyOD multivariate + auto-detect metrics",
+            smart_check_interval,
+        )
     except Exception as e:
-        print(f"❌ Failed to start smart ML anomaly detection: {e}")
-        print("   Server will run without ML-based anomaly detection.")
-        print("   Install dependencies: pip install prophet pyod pandas numpy scikit-learn")
-    print("=" * 60 + "\n")
+        logger.error("Failed to start smart ML anomaly detection: %s", e)
+        logger.info(
+            "Server will run without ML-based anomaly detection. "
+            "Install dependencies: pip install prophet pyod pandas numpy scikit-learn"
+        )
 
     mcp.run()
 

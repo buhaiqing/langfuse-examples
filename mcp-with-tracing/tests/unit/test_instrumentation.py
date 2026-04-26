@@ -9,9 +9,11 @@ from src.observability.config import ObservabilityConfig
 from src.observability.instrumentation import (
     init_observability,
     get_langfuse_client,
-    set_session_context,
-    get_session_context,
-    clear_session_context,
+)
+from src.observability.session import (
+    SessionManager,
+    set_session,
+    clear_session,
 )
 from src.observability.decorators import (
     observe_tool,
@@ -33,7 +35,6 @@ class TestObservabilityConfig:
 
     def test_is_configured_empty(self):
         """Test is_configured with empty credentials."""
-        # Create config with explicitly empty keys (ignoring env vars)
         config = ObservabilityConfig(langfuse_public_key="", langfuse_secret_key="")
         assert config.is_configured() is False
 
@@ -57,6 +58,14 @@ class TestObservabilityConfig:
 class TestInstrumentation:
     """Tests for instrumentation module."""
 
+    def setup_method(self):
+        import src.observability.instrumentation as mod
+        mod._langfuse_client = None
+
+    def teardown_method(self):
+        import src.observability.instrumentation as mod
+        mod._langfuse_client = None
+
     def test_init_observability_disabled(self):
         """Test initialization with disabled observability."""
         config = ObservabilityConfig(enabled=False)
@@ -66,7 +75,6 @@ class TestInstrumentation:
 
     def test_init_observability_no_credentials(self):
         """Test initialization without credentials."""
-        # Create config with explicitly empty keys
         config = ObservabilityConfig(
             langfuse_public_key="",
             langfuse_secret_key="",
@@ -92,16 +100,34 @@ class TestInstrumentation:
         assert get_langfuse_client() is mock_client
         mock_langfuse.assert_called_once()
 
+    @patch("src.observability.instrumentation.Langfuse")
+    def test_get_langfuse_client_returns_shared_instance(self, mock_langfuse):
+        """Test get_langfuse_client returns the same shared instance."""
+        mock_client = MagicMock()
+        mock_langfuse.return_value = mock_client
+
+        config = ObservabilityConfig(
+            langfuse_public_key="pk-test",
+            langfuse_secret_key="sk-test",
+        )
+        init_observability(config)
+
+        client1 = get_langfuse_client()
+        client2 = get_langfuse_client()
+
+        assert client1 is client2
+        assert client1 is mock_client
+
     def test_session_context(self):
         """Test session context management."""
-        set_session_context("session-123", "user-456")
-        ctx = get_session_context()
+        set_session(session_id="session-123", user_id="user-456")
+        ctx = SessionManager.get_session()
 
         assert ctx["session_id"] == "session-123"
         assert ctx["user_id"] == "user-456"
 
-        clear_session_context()
-        ctx = get_session_context()
+        clear_session()
+        ctx = SessionManager.get_session()
         assert ctx == {}
 
 
@@ -111,12 +137,13 @@ class TestDecorators:
     def test_observe_tool_decorator(self):
         """Test observe_tool decorator."""
 
-        @observe_tool(name="test_tool")
-        def test_func(x: int) -> int:
-            return x * 2
+        with patch("src.observability.decorators.get_langfuse_client", return_value=None):
+            @observe_tool(name="test_tool")
+            def test_func(x: int) -> int:
+                return x * 2
 
-        result = test_func(5)
-        assert result == 10
+            result = test_func(5)
+            assert result == 10
 
     def test_track_session_decorator(self):
         """Test track_session decorator."""
@@ -131,9 +158,10 @@ class TestDecorators:
     def test_track_prompt_version_decorator(self):
         """Test track_prompt_version decorator."""
 
-        @track_prompt_version("prompt-1", "v1.0")
-        def test_func() -> str:
-            return "result"
+        with patch("src.observability.decorators.get_langfuse_client", return_value=None):
+            @track_prompt_version("prompt-1", "v1.0")
+            def test_func() -> str:
+                return "result"
 
-        result = test_func()
-        assert result == "result"
+            result = test_func()
+            assert result == "result"

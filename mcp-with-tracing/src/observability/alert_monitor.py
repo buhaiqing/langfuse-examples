@@ -5,11 +5,15 @@ Periodically checks alert rules against current metrics and triggers alerts
 when thresholds are exceeded. Uses APScheduler for reliable task scheduling.
 """
 
+import logging
+
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.interval import IntervalTrigger
 
 from src.observability.alerting import AlertRule, get_alert_manager
 from src.observability.metrics_collector import MetricsCollector
+
+logger = logging.getLogger(__name__)
 
 
 class AlertMonitorScheduler:
@@ -39,10 +43,10 @@ class AlertMonitorScheduler:
         Registers periodic jobs to check all enabled alert rules.
         """
         if self._is_running:
-            print("⚠️  Alert monitor is already running")
+            logger.warning("Alert monitor is already running")
             return
 
-        print(f"\n🔄 Starting alert monitor (interval: {self.check_interval}min)...")
+        logger.info("Starting alert monitor (interval: %dmin)...", self.check_interval)
 
         self.scheduler = AsyncIOScheduler()
 
@@ -59,17 +63,15 @@ class AlertMonitorScheduler:
         self.scheduler.start()
         self._is_running = True
 
-        print("✅ Alert monitor started successfully")
-        print(f"   - Check interval: {self.check_interval} minutes")
-        print(f"   - Next check in: {self.check_interval} minutes")
+        logger.info("Alert monitor started successfully (interval: %dmin)", self.check_interval)
 
     def stop(self) -> None:
         """Stop the background monitoring scheduler."""
         if self.scheduler and self._is_running:
-            print("\n🛑 Stopping alert monitor...")
+            logger.info("Stopping alert monitor...")
             self.scheduler.shutdown(wait=True)
             self._is_running = False
-            print("✅ Alert monitor stopped")
+            logger.info("Alert monitor stopped")
 
     async def _check_all_rules(self) -> None:
         """
@@ -84,10 +86,10 @@ class AlertMonitorScheduler:
             rules = manager.list_rules()
 
             if not rules:
-                print("⚠️  No alert rules registered, skipping check")
+                logger.warning("No alert rules registered, skipping check")
                 return
 
-            print(f"\n🔍 Running alert check ({len(rules)} rules)...")
+            logger.info("Running alert check (%d rules)...", len(rules))
 
             triggered_count = 0
 
@@ -101,7 +103,7 @@ class AlertMonitorScheduler:
                     current_value = await self._get_metric_value(rule)
 
                     if current_value is None:
-                        print(f"   ⊘ {rule_name}: No data available")
+                        logger.debug("%s: No data available", rule_name)
                         continue
 
                     # Check rule
@@ -109,22 +111,20 @@ class AlertMonitorScheduler:
 
                     if alert:
                         triggered_count += 1
-                        print(
-                            f"   🚨 {rule_name}: TRIGGERED (value={current_value}, threshold={rule.operator} {rule.threshold})"
+                        logger.warning(
+                            "%s: TRIGGERED (value=%s, threshold=%s %s)",
+                            rule_name, current_value, rule.operator, rule.threshold,
                         )
                     else:
-                        print(f"   ✓ {rule_name}: OK (value={current_value})")
+                        logger.debug("%s: OK (value=%s)", rule_name, current_value)
 
                 except Exception as e:
-                    print(f"   ❌ {rule_name}: Check failed - {e}")
+                    logger.error("%s: Check failed - %s", rule_name, e)
 
-            print(f"\n✅ Alert check complete: {triggered_count} alert(s) triggered\n")
+            logger.info("Alert check complete: %d alert(s) triggered", triggered_count)
 
         except Exception as e:
-            print(f"❌ Alert check cycle failed: {e}")
-            import traceback
-
-            traceback.print_exc()
+            logger.error("Alert check cycle failed: %s", e, exc_info=True)
 
     async def _get_metric_value(self, rule: AlertRule) -> float | None:
         """
@@ -146,8 +146,7 @@ class AlertMonitorScheduler:
                 return self.metrics_collector.collect_latency_p95()
 
             elif metric == "latency_p99_ms":
-                # P99 not yet implemented, use P95 as fallback
-                print("   ⚠️  P99 latency not implemented, using P95")
+                logger.warning("P99 latency not implemented, using P95")
                 return self.metrics_collector.collect_latency_p95()
 
             elif metric == "avg_rating":
@@ -160,12 +159,11 @@ class AlertMonitorScheduler:
                 return 1.0 - success_rate
 
             else:
-                # Unknown metric - could be extended with custom metrics
-                print(f"   ⚠️  Unknown metric '{metric}', returning None")
+                logger.warning("Unknown metric '%s', returning None", metric)
                 return None
 
         except Exception as e:
-            print(f"   ⚠️  Failed to collect metric '{metric}': {e}")
+            logger.warning("Failed to collect metric '%s': %s", metric, e)
             return None
 
     def get_status(self) -> dict:

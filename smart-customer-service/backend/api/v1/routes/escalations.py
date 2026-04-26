@@ -1,13 +1,11 @@
 """升级管理 API 路由"""
 
-from fastapi import APIRouter
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
-from datetime import datetime
+from typing import Any
 
+from fastapi import APIRouter
+from pydantic import BaseModel
 from services.escalation_service import escalation_service
 from storage.redis_client import redis_client
-
 
 router = APIRouter(prefix="/escalations", tags=["升级管理"])
 
@@ -28,11 +26,11 @@ class EscalationCheckResponse(BaseModel):
 
     success: bool
     requires_escalation: bool
-    priority_level: Optional[str] = None
-    trigger_reasons: Optional[List[str]] = None
+    priority_level: str | None = None
+    trigger_reasons: list[str] | None = None
 
 
-@router.post("/check", response_model=Dict[str, Any])
+@router.post("/check", response_model=dict[str, Any])
 async def check_escalation(request: EscalationCheckRequest):
     """检查是否需要升级"""
     needs_escalation = await escalation_service.check_escalation(
@@ -50,7 +48,7 @@ async def check_escalation(request: EscalationCheckRequest):
     }
 
 
-@router.get("/queue", response_model=Dict[str, Any])
+@router.get("/queue", response_model=dict[str, Any])
 async def get_escalation_queue():
     """获取升级队列"""
     size = await redis_client.get_escalation_queue_size()
@@ -64,7 +62,7 @@ async def get_escalation_queue():
     }
 
 
-@router.post("/queue/next", response_model=Dict[str, Any])
+@router.post("/queue/next", response_model=dict[str, Any])
 async def get_next_escalation():
     """获取下一个升级会话"""
     next_session = await redis_client.get_next_escalation()

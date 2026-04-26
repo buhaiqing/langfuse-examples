@@ -4,17 +4,16 @@
 提供集合管理、批量操作和健康检查
 """
 
-import logging
-from typing import List, Dict, Optional, Any, Tuple
-from dataclasses import dataclass
 import asyncio
+import logging
+from dataclasses import dataclass
+from typing import Any
 
 import chromadb
-from chromadb.config import Settings
 import numpy as np
-from rank_bm25 import BM25Okapi
-
+from chromadb.config import Settings
 from core.config import settings
+from rank_bm25 import BM25Okapi
 
 logger = logging.getLogger(__name__)
 
@@ -25,30 +24,30 @@ class DocumentChunk:
 
     id: str
     content: str
-    embedding: Optional[List[float]] = None
-    metadata: Optional[Dict[str, Any]] = None
-    score: Optional[float] = None
+    embedding: list[float] | None = None
+    metadata: dict[str, Any] | None = None
+    score: float | None = None
 
 
 @dataclass
 class HybridSearchResult:
     """混合搜索结果"""
 
-    chunks: List[DocumentChunk]
-    vector_results: List[DocumentChunk]
-    keyword_results: List[DocumentChunk]
-    fused_results: List[DocumentChunk]
+    chunks: list[DocumentChunk]
+    vector_results: list[DocumentChunk]
+    keyword_results: list[DocumentChunk]
+    fused_results: list[DocumentChunk]
 
 
 class ChromaDBClient:
     """增强版 ChromaDB 客户端"""
 
     def __init__(self):
-        self.client: Optional[chromadb.Client] = None
+        self.client: chromadb.Client | None = None
         self.collection = None
         self.collection_name = "knowledge_base"
-        self._in_memory_index: Optional[BM25Okapi] = None
-        self._doc_id_map: Dict[int, str] = {}
+        self._in_memory_index: BM25Okapi | None = None
+        self._doc_id_map: dict[int, str] = {}
         self._initialized = False
 
     async def connect(self) -> None:
@@ -114,9 +113,9 @@ class ChromaDBClient:
 
     async def add_documents(
         self,
-        documents: List[DocumentChunk],
+        documents: list[DocumentChunk],
         batch_size: int = 100,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """批量添加文档
 
         Args:
@@ -199,7 +198,7 @@ class ChromaDBClient:
             logger.error(f"更新文档失败: {e}")
             return False
 
-    async def delete_documents(self, doc_ids: List[str]) -> int:
+    async def delete_documents(self, doc_ids: list[str]) -> int:
         """删除文档
 
         Args:
@@ -223,7 +222,7 @@ class ChromaDBClient:
             logger.error(f"删除文档失败: {e}")
             return 0
 
-    async def get_document(self, doc_id: str) -> Optional[DocumentChunk]:
+    async def get_document(self, doc_id: str) -> DocumentChunk | None:
         """获取单个文档
 
         Args:
@@ -258,14 +257,20 @@ class ChromaDBClient:
 
     async def similarity_search(
         self,
-        query_embedding: List[float],
+        query: str | None = None,
+        query_embedding: list[float] | None = None,
         k: int = 5,
-        filter_metadata: Optional[Dict[str, Any]] = None,
-    ) -> List[DocumentChunk]:
+        filter_metadata: dict[str, Any] | None = None,
+    ) -> list[DocumentChunk]:
         """向量相似度搜索
 
+        支持两种调用方式：
+        1. 传入 query 文本，内部自动生成 embedding
+        2. 传入 query_embedding 向量，直接搜索
+
         Args:
-            query_embedding: 查询向量
+            query: 查询文本（与 query_embedding 二选一）
+            query_embedding: 查询向量（与 query 二选一）
             k: 返回结果数量
             filter_metadata: 元数据过滤条件
 
@@ -274,6 +279,17 @@ class ChromaDBClient:
         """
         if not self._initialized:
             await self.connect()
+
+        if query_embedding is None and query is None:
+            logger.error("similarity_search 必须提供 query 或 query_embedding")
+            return []
+
+        if query_embedding is None and query is not None:
+            query_embedding = await self._embed_query(query)
+
+        if query_embedding is None:
+            logger.error("无法生成查询向量")
+            return []
 
         try:
             results = self.collection.query(
@@ -304,7 +320,7 @@ class ChromaDBClient:
         self,
         query: str,
         k: int = 5,
-    ) -> List[DocumentChunk]:
+    ) -> list[DocumentChunk]:
         """关键词 BM25 搜索
 
         Args:
@@ -352,11 +368,11 @@ class ChromaDBClient:
     async def hybrid_search(
         self,
         query: str,
-        query_embedding: List[float],
+        query_embedding: list[float],
         k: int = 5,
         vector_weight: float = 0.7,
         keyword_weight: float = 0.3,
-        filter_metadata: Optional[Dict[str, Any]] = None,
+        filter_metadata: dict[str, Any] | None = None,
     ) -> HybridSearchResult:
         """混合检索（向量 + 关键词）
 
@@ -404,13 +420,13 @@ class ChromaDBClient:
 
     def _reciprocal_rank_fusion(
         self,
-        vector_results: List[DocumentChunk],
-        keyword_results: List[DocumentChunk],
+        vector_results: list[DocumentChunk],
+        keyword_results: list[DocumentChunk],
         vector_weight: float,
         keyword_weight: float,
         k: int = 5,
         k_constant: int = 60,
-    ) -> List[DocumentChunk]:
+    ) -> list[DocumentChunk]:
         """RRF 融合算法
 
         Args:
@@ -424,8 +440,8 @@ class ChromaDBClient:
         Returns:
             融合后的结果
         """
-        scores: Dict[str, float] = {}
-        doc_map: Dict[str, DocumentChunk] = {}
+        scores: dict[str, float] = {}
+        doc_map: dict[str, DocumentChunk] = {}
 
         # 处理向量搜索结果
         for rank, doc in enumerate(vector_results, start=1):
@@ -454,7 +470,7 @@ class ChromaDBClient:
 
     # ==================== 集合管理 ====================
 
-    async def list_collections(self) -> List[str]:
+    async def list_collections(self) -> list[str]:
         """列出所有集合"""
         if not self._initialized:
             await self.connect()
@@ -466,7 +482,7 @@ class ChromaDBClient:
             logger.error(f"列出集合失败: {e}")
             return []
 
-    async def create_collection(self, name: str, metadata: Optional[Dict] = None) -> bool:
+    async def create_collection(self, name: str, metadata: dict | None = None) -> bool:
         """创建新集合
 
         Args:
@@ -507,7 +523,7 @@ class ChromaDBClient:
             logger.error(f"删除集合失败: {e}")
             return False
 
-    async def get_collection_stats(self) -> Dict[str, Any]:
+    async def get_collection_stats(self) -> dict[str, Any]:
         """获取集合统计信息
 
         Returns:
@@ -529,6 +545,25 @@ class ChromaDBClient:
 
     # ==================== 索引管理 ====================
 
+    async def _embed_query(self, query: str) -> list[float] | None:
+        """将查询文本转换为向量
+
+        Args:
+            query: 查询文本
+
+        Returns:
+            查询向量，失败时返回 None
+        """
+        try:
+            from core.llm_client_pool import get_embedding_client
+
+            embedding_client = get_embedding_client()
+            embeddings = await embedding_client.aembed_query(query)
+            return embeddings
+        except Exception as e:
+            logger.error("查询文本生成 embedding 失败: %s", e)
+            return None
+
     async def _rebuild_keyword_index(self) -> None:
         """重建 BM25 关键词索引"""
         try:
@@ -546,7 +581,9 @@ class ChromaDBClient:
             corpus = []
             self._doc_id_map = {}
 
-            for i, (doc_id, content) in enumerate(zip(result["ids"], result["documents"])):
+            for i, (doc_id, content) in enumerate(
+                zip(result["ids"], result["documents"], strict=False)
+            ):
                 if content:
                     tokens = content.lower().split()
                     corpus.append(tokens)

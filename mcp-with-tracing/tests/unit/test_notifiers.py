@@ -5,6 +5,7 @@ Tests cover WeCom, Slack, Email, PagerDuty, and Webhook notifiers.
 """
 
 import pytest
+import logging
 from unittest.mock import Mock, patch, MagicMock
 import json
 from datetime import datetime, timezone
@@ -129,16 +130,15 @@ class TestWeComNotifier:
         assert "ℹ️" in payload["markdown"]["content"]
 
     @patch("urllib.request.urlopen", side_effect=Exception("Network error"))
-    def test_wecom_notifier_handles_exception(self, mock_urlopen, sample_alert, capsys):
+    def test_wecom_notifier_handles_exception(self, mock_urlopen, sample_alert, caplog):
         """Test that WeCom notifier handles exceptions gracefully."""
         webhook_url = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test"
         notifier = WeComNotifier(webhook_url)
         
-        # Should not raise exception
-        notifier(sample_alert)
+        with caplog.at_level(logging.ERROR, logger="src.observability.notifiers"):
+            notifier(sample_alert)
         
-        captured = capsys.readouterr()
-        assert "Failed to send WeCom notification" in captured.out
+        assert "Failed to send WeCom notification" in caplog.text
 
 
 class TestSlackNotifier:
@@ -230,15 +230,15 @@ class TestSlackNotifier:
         assert attachment["color"] == "good"
 
     @patch("urllib.request.urlopen", side_effect=Exception("Network error"))
-    def test_slack_notifier_handles_exception(self, mock_urlopen, sample_alert, capsys):
+    def test_slack_notifier_handles_exception(self, mock_urlopen, sample_alert, caplog):
         """Test that Slack notifier handles exceptions gracefully."""
         webhook_url = "https://hooks.slack.com/services/test"
         notifier = SlackNotifier(webhook_url)
         
-        notifier(sample_alert)
+        with caplog.at_level(logging.ERROR, logger="src.observability.notifiers"):
+            notifier(sample_alert)
         
-        captured = capsys.readouterr()
-        assert "Failed to send Slack notification" in captured.out
+        assert "Failed to send Slack notification" in caplog.text
 
 
 class TestEmailNotifier:
@@ -275,7 +275,7 @@ class TestEmailNotifier:
         assert mock_smtp_instance.sendmail.called
 
     @patch("smtplib.SMTP", side_effect=Exception("SMTP error"))
-    def test_email_notifier_handles_exception(self, mock_smtp, sample_alert, capsys):
+    def test_email_notifier_handles_exception(self, mock_smtp, sample_alert, caplog):
         """Test that Email notifier handles exceptions gracefully."""
         notifier = EmailNotifier(
             smtp_host="smtp.example.com",
@@ -284,10 +284,10 @@ class TestEmailNotifier:
             recipients=["admin@example.com"],
         )
         
-        notifier(sample_alert)
+        with caplog.at_level(logging.ERROR, logger="src.observability.notifiers"):
+            notifier(sample_alert)
         
-        captured = capsys.readouterr()
-        assert "Failed to send email notification" in captured.out
+        assert "Failed to send email notification" in caplog.text
 
 
 class TestPagerDutyNotifier:
@@ -322,15 +322,15 @@ class TestPagerDutyNotifier:
         assert payload["payload"]["severity"] == "warning"
 
     @patch("urllib.request.urlopen", side_effect=Exception("Network error"))
-    def test_pagerduty_notifier_handles_exception(self, mock_urlopen, sample_alert, capsys):
+    def test_pagerduty_notifier_handles_exception(self, mock_urlopen, sample_alert, caplog):
         """Test that PagerDuty notifier handles exceptions gracefully."""
         routing_key = "test_routing_key"
         notifier = PagerDutyNotifier(routing_key)
         
-        notifier(sample_alert)
+        with caplog.at_level(logging.ERROR, logger="src.observability.notifiers"):
+            notifier(sample_alert)
         
-        captured = capsys.readouterr()
-        assert "Failed to send PagerDuty notification" in captured.out
+        assert "Failed to send PagerDuty notification" in caplog.text
 
 
 class TestWebhookNotifier:
@@ -372,15 +372,15 @@ class TestWebhookNotifier:
         assert payload["operator"] == sample_alert.rule.operator
 
     @patch("urllib.request.urlopen", side_effect=Exception("Network error"))
-    def test_webhook_notifier_handles_exception(self, mock_urlopen, sample_alert, capsys):
+    def test_webhook_notifier_handles_exception(self, mock_urlopen, sample_alert, caplog):
         """Test that Webhook notifier handles exceptions gracefully."""
         webhook_url = "https://example.com/webhook"
         notifier = WebhookNotifier(webhook_url)
         
-        notifier(sample_alert)
+        with caplog.at_level(logging.ERROR, logger="src.observability.notifiers"):
+            notifier(sample_alert)
         
-        captured = capsys.readouterr()
-        assert "Failed to send webhook notification" in captured.out
+        assert "Failed to send webhook notification" in caplog.text
 
 
 class TestNotifiersExport:

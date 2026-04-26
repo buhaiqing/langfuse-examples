@@ -6,21 +6,18 @@
 
 import logging
 from contextlib import asynccontextmanager
-from typing import Optional, List, TypeVar, Generic, Type, Any, Dict
-from datetime import datetime
-
-from sqlalchemy.ext.asyncio import (
-    create_async_engine,
-    AsyncSession,
-    async_sessionmaker,
-    AsyncEngine,
-)
-from sqlalchemy.orm import declarative_base
-from sqlalchemy import select, update, delete, insert, func, text
-from sqlalchemy.exc import SQLAlchemyError, IntegrityError
+from typing import Any, TypeVar
 
 from core.config import settings
 from models.schemas import Base
+from sqlalchemy import delete, func, select, text, update
+from sqlalchemy.ext.asyncio import (
+    AsyncEngine,
+    AsyncSession,
+    async_sessionmaker,
+    create_async_engine,
+)
+from utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +27,7 @@ T = TypeVar("T", bound=Base)
 class DatabaseError(Exception):
     """数据库操作异常"""
 
-    def __init__(self, message: str, original_error: Optional[Exception] = None):
+    def __init__(self, message: str, original_error: Exception | None = None):
         self.message = message
         self.original_error = original_error
         super().__init__(self.message)
@@ -40,8 +37,8 @@ class PostgresClient:
     """PostgreSQL 异步客户端封装"""
 
     def __init__(self):
-        self.engine: Optional[AsyncEngine] = None
-        self.session_maker: Optional[async_sessionmaker[AsyncSession]] = None
+        self.engine: AsyncEngine | None = None
+        self.session_maker: async_sessionmaker[AsyncSession] | None = None
         self._connected = False
 
     async def connect(self) -> None:
@@ -71,7 +68,7 @@ class PostgresClient:
 
         except Exception as e:
             logger.error(f"PostgreSQL 连接失败: {e}")
-            raise DatabaseError("数据库连接失败", e)
+            raise DatabaseError("数据库连接失败", e) from e
 
     async def close(self) -> None:
         """关闭数据库连接"""
@@ -105,7 +102,7 @@ class PostgresClient:
                 await session.commit()
             except Exception as e:
                 await session.rollback()
-                raise DatabaseError("数据库操作失败", e)
+                raise DatabaseError("数据库操作失败", e) from e
             finally:
                 await session.close()
 
@@ -121,7 +118,7 @@ class PostgresClient:
                     yield session
                 except Exception as e:
                     await session.rollback()
-                    raise DatabaseError("事务执行失败", e)
+                    raise DatabaseError("事务执行失败", e) from e
                 finally:
                     await session.close()
 
@@ -143,7 +140,7 @@ class PostgresClient:
             logger.debug(f"创建记录: {model}")
             return model
 
-    async def create_many(self, models: List[T]) -> List[T]:
+    async def create_many(self, models: list[T]) -> list[T]:
         """批量创建记录
 
         Args:
@@ -160,7 +157,7 @@ class PostgresClient:
             logger.debug(f"批量创建 {len(models)} 条记录")
             return models
 
-    async def get_by_id(self, model_class: Type[T], id: Any) -> Optional[T]:
+    async def get_by_id(self, model_class: type[T], id: Any) -> T | None:
         """根据 ID 查询记录
 
         Args:
@@ -174,7 +171,7 @@ class PostgresClient:
             result = await session.get(model_class, id)
             return result
 
-    async def get_one(self, model_class: Type[T], **filters) -> Optional[T]:
+    async def get_one(self, model_class: type[T], **filters) -> T | None:
         """根据条件查询单条记录
 
         Args:
@@ -195,12 +192,12 @@ class PostgresClient:
 
     async def get_many(
         self,
-        model_class: Type[T],
+        model_class: type[T],
         limit: int = 100,
         offset: int = 0,
-        order_by: Optional[str] = None,
+        order_by: str | None = None,
         **filters,
-    ) -> tuple[List[T], int]:
+    ) -> tuple[list[T], int]:
         """根据条件查询多条记录（支持分页）
 
         Args:
@@ -245,7 +242,7 @@ class PostgresClient:
 
             return list(records), total
 
-    async def update(self, model_class: Type[T], id: Any, **updates) -> Optional[T]:
+    async def update(self, model_class: type[T], id: Any, **updates) -> T | None:
         """更新记录
 
         Args:
@@ -259,7 +256,7 @@ class PostgresClient:
         async with self.session() as session:
             # 添加更新时间
             if hasattr(model_class, "updated_at"):
-                updates["updated_at"] = datetime.utcnow()
+                updates["updated_at"] = utcnow()
 
             stmt = (
                 update(model_class)
@@ -276,7 +273,7 @@ class PostgresClient:
             # 返回更新后的记录
             return await session.get(model_class, id)
 
-    async def update_many(self, model_class: Type[T], ids: List[Any], **updates) -> int:
+    async def update_many(self, model_class: type[T], ids: list[Any], **updates) -> int:
         """批量更新记录
 
         Args:
@@ -289,18 +286,14 @@ class PostgresClient:
         """
         async with self.session() as session:
             if hasattr(model_class, "updated_at"):
-                updates["updated_at"] = datetime.utcnow()
+                updates["updated_at"] = utcnow()
 
-            stmt = (
-                update(model_class)
-                .where(model_class.id.in_(ids))
-                .values(**updates)
-            )
+            stmt = update(model_class).where(model_class.id.in_(ids)).values(**updates)
 
             result = await session.execute(stmt)
             return result.rowcount
 
-    async def delete(self, model_class: Type[T], id: Any) -> bool:
+    async def delete(self, model_class: type[T], id: Any) -> bool:
         """删除记录
 
         Args:
@@ -315,7 +308,7 @@ class PostgresClient:
             result = await session.execute(stmt)
             return result.rowcount > 0
 
-    async def delete_many(self, model_class: Type[T], ids: List[Any]) -> int:
+    async def delete_many(self, model_class: type[T], ids: list[Any]) -> int:
         """批量删除记录
 
         Args:
@@ -330,7 +323,7 @@ class PostgresClient:
             result = await session.execute(stmt)
             return result.rowcount
 
-    async def exists(self, model_class: Type[T], **filters) -> bool:
+    async def exists(self, model_class: type[T], **filters) -> bool:
         """检查记录是否存在
 
         Args:
@@ -350,7 +343,7 @@ class PostgresClient:
             result = await session.execute(stmt)
             return result.scalar() > 0
 
-    async def count(self, model_class: Type[T], **filters) -> int:
+    async def count(self, model_class: type[T], **filters) -> int:
         """统计记录数量
 
         Args:
@@ -372,7 +365,7 @@ class PostgresClient:
 
     # ==================== 业务特定查询 ====================
 
-    async def get_documents_by_title(self, title: str, limit: int = 10) -> List[Any]:
+    async def get_documents_by_title(self, title: str, limit: int = 10) -> list[Any]:
         """根据标题搜索文档
 
         Args:
@@ -385,17 +378,13 @@ class PostgresClient:
         from models.schemas import Document
 
         async with self.session() as session:
-            stmt = (
-                select(Document)
-                .where(Document.title.ilike(f"%{title}%"))
-                .limit(limit)
-            )
+            stmt = select(Document).where(Document.title.ilike(f"%{title}%")).limit(limit)
             result = await session.execute(stmt)
             return list(result.scalars().all())
 
     async def get_audit_logs_by_user(
         self, user_id: str, limit: int = 50, offset: int = 0
-    ) -> tuple[List[Any], int]:
+    ) -> tuple[list[Any], int]:
         """获取用户的审计日志
 
         Args:
@@ -417,9 +406,7 @@ class PostgresClient:
                 .offset(offset)
             )
             count_stmt = (
-                select(func.count())
-                .select_from(AuditLog)
-                .where(AuditLog.user_id == user_id)
+                select(func.count()).select_from(AuditLog).where(AuditLog.user_id == user_id)
             )
 
             result = await session.execute(stmt)
@@ -428,8 +415,8 @@ class PostgresClient:
             return list(result.scalars().all()), count_result.scalar()
 
     async def get_conversation_archives(
-        self, user_id: Optional[str] = None, limit: int = 50, offset: int = 0
-    ) -> tuple[List[Any], int]:
+        self, user_id: str | None = None, limit: int = 50, offset: int = 0
+    ) -> tuple[list[Any], int]:
         """获取会话归档列表
 
         Args:

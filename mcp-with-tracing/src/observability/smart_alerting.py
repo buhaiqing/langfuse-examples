@@ -5,6 +5,7 @@ Extends the base AlertManager with intelligent anomaly detection
 using Prophet and PyOD for proactive monitoring.
 """
 
+import logging
 from typing import Dict, Any, Optional
 from datetime import datetime, timezone
 import time
@@ -19,6 +20,8 @@ from src.observability.alerting import (
 )
 from src.observability.metrics_collector import MetricsCollector
 from src.observability.anomaly_detector import AnomalyDetector
+
+logger = logging.getLogger(__name__)
 
 
 class SmartAlertManager(AlertManager):
@@ -54,7 +57,7 @@ class SmartAlertManager(AlertManager):
         and triggers alerts when anomalies are detected.
         """
         if self._monitoring_thread and self._monitoring_thread.is_alive():
-            print("Monitoring is already running")
+            logger.warning("Monitoring is already running")
             return
 
         self._stop_monitoring = False
@@ -65,7 +68,7 @@ class SmartAlertManager(AlertManager):
                 try:
                     self._run_detection_cycle()
                 except Exception as e:
-                    print(f"Detection cycle failed: {e}")
+                    logger.error("Detection cycle failed: %s", e)
                 
                 # Sleep in small increments to allow quick shutdown
                 for _ in range(self.detection_interval * 60):
@@ -79,14 +82,14 @@ class SmartAlertManager(AlertManager):
             name="SmartAlertMonitor"
         )
         self._monitoring_thread.start()
-        print(f"Smart alert monitoring started (interval: {self.detection_interval}min)")
+        logger.info("Smart alert monitoring started (interval: %dmin)", self.detection_interval)
 
     def stop_monitoring(self) -> None:
         """Stop the background monitoring thread."""
         self._stop_monitoring = True
         if self._monitoring_thread:
             self._monitoring_thread.join(timeout=30)
-            print("Smart alert monitoring stopped")
+            logger.info("Smart alert monitoring stopped")
 
     def _run_detection_cycle(self) -> None:
         """Execute one detection cycle."""
@@ -95,15 +98,13 @@ class SmartAlertManager(AlertManager):
 
             # Train models on first run or periodically
             if self._last_detection_time is None:
-                print("Initial model training...")
+                logger.info("Initial model training...")
                 self.anomaly_detector.train_all_models(hours_of_history=24)
             elif (now - self._last_detection_time).total_seconds() > 3600:
-                # Retrain every hour
-                print("Periodic model retraining...")
+                logger.info("Periodic model retraining...")
                 self.anomaly_detector.train_all_models(hours_of_history=24)
 
-            # Execute anomaly detection
-            print("Running anomaly detection...")
+            logger.info("Running anomaly detection...")
             anomalies = self.anomaly_detector.detect_anomalies()
 
             # Create alerts for detected anomalies
@@ -113,15 +114,11 @@ class SmartAlertManager(AlertManager):
             self._last_detection_time = now
             
             if anomalies:
-                print(f"Detected {len(anomalies)} anomalies")
+                logger.warning("Detected %d anomalies", len(anomalies))
             else:
-                print("No anomalies detected")
+                logger.debug("No anomalies detected")
         except Exception as e:
-            # Log exception but don't crash the monitoring thread
-            print(f"Detection cycle failed: {e}")
-            import traceback
-            traceback.print_exc()
-            # Still update last detection time to avoid repeated failures
+            logger.error("Detection cycle failed: %s", e, exc_info=True)
             self._last_detection_time = datetime.now(timezone.utc)
 
     def _create_smart_alert(self, anomaly: Dict[str, Any]) -> None:
@@ -190,7 +187,7 @@ class SmartAlertManager(AlertManager):
         # Send notifications
         self._send_notifications(alert)
         
-        print(f"Alert created: {rule_name} ({anomaly['severity'].value})")
+        logger.warning("Alert created: %s (%s)", rule_name, anomaly['severity'].value)
 
     def get_ml_alert_statistics(self) -> Dict[str, Any]:
         """

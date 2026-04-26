@@ -16,17 +16,17 @@ WebSocket 服务端处理器
 
 import asyncio
 import json
-import time
-from datetime import datetime
-from typing import Dict, Set, Optional, List, Any
-from dataclasses import dataclass, field
-from collections import defaultdict
 import logging
+import time
+from dataclasses import dataclass, field
+from datetime import datetime
+from typing import Any
 
+from core.config import settings
 from fastapi import WebSocket, WebSocketDisconnect
 from starlette.websockets import WebSocketState
 from storage.redis_client import redis_client
-from core.config import settings
+from utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -66,11 +66,11 @@ class WebSocketManager:
 
     def __init__(self):
         # 活跃的 WebSocket 连接
-        self.active_connections: Dict[str, WebSocketConnection] = {}
+        self.active_connections: dict[str, WebSocketConnection] = {}
         # 客服连接集合
-        self.agent_connections: Set[str] = set()
+        self.agent_connections: set[str] = set()
         # 用户连接集合
-        self.user_connections: Set[str] = set()
+        self.user_connections: set[str] = set()
         # 心跳超时时间（秒）
         self.heartbeat_timeout = (
             settings.websocket_heartbeat_timeout
@@ -116,8 +116,8 @@ class WebSocketManager:
             connection = WebSocketConnection(
                 websocket=websocket,
                 client_id=client_id,
-                connection_time=datetime.utcnow(),
-                last_heartbeat=datetime.utcnow(),
+                connection_time=utcnow(),
+                last_heartbeat=utcnow(),
                 is_agent=is_agent,
             )
 
@@ -152,7 +152,7 @@ class WebSocketManager:
                     "type": "welcome",
                     "payload": {
                         "client_id": client_id,
-                        "timestamp": datetime.utcnow().isoformat(),
+                        "timestamp": utcnow().isoformat(),
                         "connections_count": current_count,
                     },
                 },
@@ -171,7 +171,7 @@ class WebSocketManager:
             connection_data = {
                 "client_id": client_id,
                 "is_agent": is_agent,
-                "connected_at": datetime.utcnow().isoformat(),
+                "connected_at": utcnow().isoformat(),
             }
             await redis_client.add_websocket_connection(client_id, connection_data)
         except Exception as e:
@@ -237,8 +237,8 @@ class WebSocketManager:
             return False
 
     async def broadcast_to_agents(
-        self, message: dict, exclude: Optional[Set[str]] = None
-    ) -> Dict[str, Any]:
+        self, message: dict, exclude: set[str] | None = None
+    ) -> dict[str, Any]:
         """
         广播消息到所有客服 - fire-and-forget 优化版本
 
@@ -301,7 +301,8 @@ class WebSocketManager:
 
         if failed_count > 0 or error_count > 0:
             logger.warning(
-                f"广播完成：成功 {success_count}/{len(tasks)}, 失败 {failed_count}, 错误 {error_count}, 耗时 {duration:.3f}s"
+                f"广播完成：成功 {success_count}/{len(tasks)}, "
+                f"失败 {failed_count}, 错误 {error_count}, 耗时 {duration:.3f}s"
             )
             self.metrics.broadcast_errors += error_count
 
@@ -332,13 +333,13 @@ class WebSocketManager:
         """处理心跳"""
         async with self._connections_lock:
             if client_id in self.active_connections:
-                self.active_connections[client_id].last_heartbeat = datetime.utcnow()
+                self.active_connections[client_id].last_heartbeat = utcnow()
                 return True
         return False
 
     async def check_heartbeats(self) -> int:
         """检查所有连接的心跳状态 - 返回断开的连接数"""
-        current_time = datetime.utcnow()
+        current_time = utcnow()
         dead_connections = []
 
         async with self._connections_lock:
@@ -396,10 +397,8 @@ class WebSocketManager:
             "connection_errors": self.metrics.connection_errors,
             "broadcast_errors": self.metrics.broadcast_errors,
             "uptime_seconds": (
-                datetime.utcnow()
-                - datetime.fromtimestamp(
-                    getattr(self, "_start_time", datetime.utcnow().timestamp())
-                )
+                utcnow()
+                - datetime.fromtimestamp(getattr(self, "_start_time", utcnow().timestamp()))
             ).total_seconds(),
         }
 
@@ -410,7 +409,7 @@ class WebSocketManager:
 
 # 全局 WebSocket 管理器实例
 websocket_manager = WebSocketManager()
-websocket_manager._start_time = datetime.utcnow().timestamp()
+websocket_manager._start_time = utcnow().timestamp()
 
 
 async def websocket_handler(websocket: WebSocket, client_id: str, is_agent: bool = False):
@@ -442,7 +441,7 @@ async def websocket_handler(websocket: WebSocket, client_id: str, is_agent: bool
                     await websocket_manager.handle_heartbeat(client_id)
                     await websocket_manager.send_personal_message(
                         websocket,
-                        {"type": "heartbeat_ack", "timestamp": datetime.utcnow().isoformat()},
+                        {"type": "heartbeat_ack", "timestamp": utcnow().isoformat()},
                     )
 
                 elif msg_type == "status_change" and is_agent:
@@ -471,7 +470,7 @@ async def websocket_handler(websocket: WebSocket, client_id: str, is_agent: bool
                                 "type": "new_message",
                                 "payload": {
                                     "session_id": session_id,
-                                    "timestamp": datetime.utcnow().isoformat(),
+                                    "timestamp": utcnow().isoformat(),
                                 },
                             }
                         )
@@ -488,7 +487,7 @@ async def websocket_handler(websocket: WebSocket, client_id: str, is_agent: bool
         await websocket_manager.disconnect(client_id)
 
 
-async def broadcast_escalation(escalation_data: dict) -> Dict[str, Any]:
+async def broadcast_escalation(escalation_data: dict) -> dict[str, Any]:
     """
     广播升级通知给所有客服
 
@@ -506,7 +505,7 @@ async def broadcast_escalation(escalation_data: dict) -> Dict[str, Any]:
     )
 
 
-async def notify_session_update(session_id: str, update_data: dict) -> Dict[str, Any]:
+async def notify_session_update(session_id: str, update_data: dict) -> dict[str, Any]:
     """
     通知会话更新
 

@@ -4,19 +4,12 @@ Redis 客户端降级包装器
 将降级机制集成到现有 RedisClient，提供透明的降级支持
 """
 
-import asyncio
-import json
 import logging
-from typing import Optional, Dict, Any, List, Callable
-from datetime import datetime
-from functools import wraps
+from typing import Any
 
-from storage.redis_client import RedisClient, ConversationState, RedisKeys
+from storage.redis_client import ConversationState, RedisClient, RedisKeys
 from storage.redis_fallback import (
     RedisFallbackManager,
-    FallbackStrategy,
-    FallbackConfig,
-    CircuitBreakerConfig,
     get_redis_fallback_manager,
 )
 
@@ -37,7 +30,7 @@ class FallbackRedisClient:
     def __init__(
         self,
         redis_client: RedisClient,
-        fallback_manager: Optional[RedisFallbackManager] = None,
+        fallback_manager: RedisFallbackManager | None = None,
     ):
         self.redis_client = redis_client
         self.fallback_manager = fallback_manager or get_redis_fallback_manager()
@@ -50,9 +43,7 @@ class FallbackRedisClient:
 
             # 启动自动恢复检查
             if not self._recovery_started:
-                await self.fallback_manager.start_auto_recovery(
-                    check_func=self._check_recovery
-                )
+                await self.fallback_manager.start_auto_recovery(check_func=self._check_recovery)
                 self._recovery_started = True
 
             return True
@@ -87,7 +78,7 @@ class FallbackRedisClient:
     async def save_session_state(
         self,
         state: ConversationState,
-        ttl: Optional[int] = None,
+        ttl: int | None = None,
     ) -> bool:
         """保存会话状态（带降级）"""
         key = RedisKeys.session_state(state.session_id)
@@ -102,7 +93,7 @@ class FallbackRedisClient:
     async def get_session_state(
         self,
         session_id: str,
-    ) -> Optional[ConversationState]:
+    ) -> ConversationState | None:
         """获取会话状态（带降级）"""
         key = RedisKeys.session_state(session_id)
 
@@ -138,13 +129,11 @@ class FallbackRedisClient:
         session_id: str,
         role: str,
         content: str,
-        metadata: Optional[Dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
     ) -> bool:
         """添加消息到历史"""
         try:
-            await self.redis_client.add_message_to_history(
-                session_id, role, content, metadata
-            )
+            await self.redis_client.add_message_to_history(session_id, role, content, metadata)
             return True
         except Exception as e:
             logger.warning(f"添加消息到历史失败，降级处理: {e}")
@@ -155,7 +144,7 @@ class FallbackRedisClient:
         self,
         session_id: str,
         limit: int = 50,
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """获取会话历史（带降级）"""
         key = f"history:{session_id}"
 
@@ -170,8 +159,8 @@ class FallbackRedisClient:
     async def save_user_profile(
         self,
         user_id: str,
-        profile: Dict[str, Any],
-        ttl: Optional[int] = None,
+        profile: dict[str, Any],
+        ttl: int | None = None,
     ) -> bool:
         """保存用户画像"""
         key = RedisKeys.user_profile(user_id)
@@ -186,7 +175,7 @@ class FallbackRedisClient:
     async def get_user_profile(
         self,
         user_id: str,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """获取用户画像"""
         key = RedisKeys.user_profile(user_id)
 
@@ -212,7 +201,7 @@ class FallbackRedisClient:
             cache_ttl=ttl_seconds,
         )
 
-    async def cache_get(self, key: str) -> Optional[Any]:
+    async def cache_get(self, key: str) -> Any | None:
         """获取缓存"""
         return await self.fallback_manager.execute_with_fallback(
             operation=lambda: self.redis_client.cache_get(key),
@@ -296,7 +285,7 @@ class FallbackRedisClient:
             logger.warning(f"添加升级队列失败: {e}")
             return True
 
-    async def get_next_escalation(self) -> Optional[str]:
+    async def get_next_escalation(self) -> str | None:
         """获取下一个升级"""
         return await self.fallback_manager.execute_with_fallback(
             operation=lambda: self.redis_client.get_next_escalation(),
@@ -326,7 +315,7 @@ class FallbackRedisClient:
         except Exception:
             return True
 
-    async def get_agent_status(self, agent_id: str) -> Optional[dict]:
+    async def get_agent_status(self, agent_id: str) -> dict | None:
         """获取客服状态"""
         key = f"agent:{agent_id}:status"
 
@@ -355,7 +344,7 @@ class FallbackRedisClient:
         )
 
     # ==================== 状态检查 ====================
-    def get_fallback_status(self) -> Dict[str, Any]:
+    def get_fallback_status(self) -> dict[str, Any]:
         """获取降级状态"""
         return self.fallback_manager.get_status()
 
@@ -369,7 +358,7 @@ class FallbackRedisClient:
 
 
 # ==================== 全局实例 ====================
-_fallback_redis_client: Optional[FallbackRedisClient] = None
+_fallback_redis_client: FallbackRedisClient | None = None
 
 
 async def get_fallback_redis_client() -> FallbackRedisClient:

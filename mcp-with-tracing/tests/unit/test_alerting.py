@@ -6,6 +6,7 @@ and alert statistics.
 """
 
 import pytest
+import logging
 from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
@@ -332,7 +333,7 @@ class TestNotificationChannels:
         assert slack_handler.call_count == 1
         assert email_handler.call_count == 1
 
-    def test_notification_handler_exception_handling(self, manager):
+    def test_notification_handler_exception_handling(self, manager, caplog):
         """Test that notification handler exceptions are caught gracefully."""
         failing_handler = Mock(side_effect=Exception("Notification failed"))
 
@@ -348,11 +349,10 @@ class TestNotificationChannels:
         )
         manager.register_rule(rule)
 
-        # Should not raise exception
-        with patch("builtins.print") as mock_print:
+        with caplog.at_level(logging.ERROR, logger="src.observability.alerting"):
             manager.check_rule("failing-notify", 150)
-            mock_print.assert_called()
-            assert "Failed to send webhook notification" in str(mock_print.call_args)
+        
+        assert "Failed to send webhook notification" in caplog.text
 
 
 class TestAlertStatistics:

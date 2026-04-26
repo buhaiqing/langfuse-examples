@@ -4,8 +4,8 @@
 定义业务异常体系和全局异常处理器
 """
 
-from typing import Optional, Dict, Any
 from enum import Enum
+from typing import Any
 
 
 class ErrorCode(str, Enum):
@@ -63,7 +63,7 @@ class BusinessException(Exception):
         code: ErrorCode = ErrorCode.UNKNOWN_ERROR,
         message: str = "操作失败",
         status_code: int = 400,
-        details: Optional[Dict[str, Any]] = None,
+        details: dict[str, Any] | None = None,
     ):
         self.code = code
         self.message = message
@@ -71,7 +71,7 @@ class BusinessException(Exception):
         self.details = details or {}
         super().__init__(self.message)
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """转换为字典"""
         return {
             "success": False,
@@ -84,7 +84,7 @@ class BusinessException(Exception):
 class ValidationException(BusinessException):
     """参数验证异常"""
 
-    def __init__(self, message: str = "参数验证失败", details: Optional[Dict[str, Any]] = None):
+    def __init__(self, message: str = "参数验证失败", details: dict[str, Any] | None = None):
         super().__init__(
             code=ErrorCode.INVALID_PARAMETER,
             message=message,
@@ -118,7 +118,7 @@ class AuthorizationException(BusinessException):
 class ResourceNotFoundException(BusinessException):
     """资源不存在异常"""
 
-    def __init__(self, resource: str = "资源", resource_id: Optional[str] = None):
+    def __init__(self, resource: str = "资源", resource_id: str | None = None):
         message = f"{resource}不存在"
         if resource_id:
             message = f"{resource} [{resource_id}] 不存在"
@@ -154,6 +154,7 @@ class RateLimitException(BusinessException):
 
 # ==================== 业务特定异常 ====================
 
+
 class IntentRecognitionFailed(BusinessException):
     """意图识别失败"""
 
@@ -168,7 +169,9 @@ class IntentRecognitionFailed(BusinessException):
 class RAGQueryFailed(BusinessException):
     """RAG 查询失败"""
 
-    def __init__(self, message: str = "知识库查询失败", code: ErrorCode = ErrorCode.RAG_QUERY_FAILED):
+    def __init__(
+        self, message: str = "知识库查询失败", code: ErrorCode = ErrorCode.RAG_QUERY_FAILED
+    ):
         super().__init__(
             code=code,
             message=message,

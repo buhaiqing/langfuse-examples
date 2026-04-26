@@ -2,14 +2,13 @@
 Session management for MCP Langfuse Observability.
 """
 
+import logging
 import uuid
 from typing import Any, Optional
 from contextvars import ContextVar
 from datetime import datetime, timezone
-from contextlib import nullcontext
 
-from langfuse import propagate_attributes
-
+logger = logging.getLogger(__name__)
 
 _session_context: ContextVar[dict[str, Any]] = ContextVar(
     "session_context",
@@ -21,7 +20,10 @@ class SessionManager:
     """
     Manages session lifecycle and context propagation.
 
-    Handles session ID generation, storage, and Langfuse attribute propagation.
+    Handles session ID generation, storage, and context variable management.
+    Session context is passed directly to Langfuse trace creation methods
+    (session_id, user_id parameters) rather than through a separate
+    propagation mechanism.
     """
 
     @staticmethod
@@ -98,18 +100,6 @@ class SessionManager:
     def clear_session(cls) -> None:
         """Clear session context."""
         _session_context.set({})
-
-    @staticmethod
-    def propagate_session_ctx():
-        ctx = SessionManager.get_session()
-        if not ctx.get("session_id"):
-            return nullcontext()
-
-        return propagate_attributes(
-            session_id=ctx["session_id"],
-            user_id=ctx.get("user_id"),
-            metadata=ctx.get("metadata", {}),
-        )
 
     @classmethod
     def start_session(

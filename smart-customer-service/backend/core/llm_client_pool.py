@@ -10,18 +10,19 @@ LLM 客户端缓存管理模块
 """
 
 import asyncio
-import logging
-import time
 import hashlib
 import json
-from typing import Dict, Any, Optional, List, Callable
-from datetime import datetime, timedelta
-from dataclasses import dataclass, field
+import logging
+import time
+from collections.abc import Callable
+from dataclasses import dataclass
 from functools import wraps
 from threading import Lock
+from typing import Any
 
-from langchain_openai import ChatOpenAI, OpenAIEmbeddings
 from langchain_core.prompts import ChatPromptTemplate
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+
 from core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -31,9 +32,10 @@ logger = logging.getLogger(__name__)
 @dataclass
 class LLMClientConfig:
     """LLM 客户端配置"""
+
     model_name: str
     temperature: float = 0.0
-    max_tokens: Optional[int] = None
+    max_tokens: int | None = None
     request_timeout: float = 60.0
     max_retries: int = 3
 
@@ -50,6 +52,7 @@ class LLMClientConfig:
 @dataclass
 class EmbeddingClientConfig:
     """Embedding 客户端配置"""
+
     model_name: str
     chunk_size: int = 1000
 
@@ -67,7 +70,7 @@ class RateLimiter:
 
     def __init__(self, requests_per_minute: int = 60):
         self.requests_per_minute = requests_per_minute
-        self._requests: List[float] = []
+        self._requests: list[float] = []
         self._lock = Lock()
 
     def acquire(self, timeout: float = 10.0) -> bool:
@@ -128,31 +131,34 @@ class LLMResponseCache:
     def __init__(self, max_size: int = 100, ttl_seconds: int = 300):
         self.max_size = max_size
         self.ttl_seconds = ttl_seconds
-        self._cache: Dict[str, Dict[str, Any]] = {}
+        self._cache: dict[str, dict[str, Any]] = {}
         self._lock = Lock()
 
     def _generate_key(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         model: str,
         temperature: float,
     ) -> str:
         """生成缓存键"""
         # 使用消息内容、模型名和温度生成唯一键
-        content = json.dumps({
-            "messages": messages,
-            "model": model,
-            "temperature": temperature,
-        }, sort_keys=True)
+        content = json.dumps(
+            {
+                "messages": messages,
+                "model": model,
+                "temperature": temperature,
+            },
+            sort_keys=True,
+        )
 
         return hashlib.sha256(content.encode()).hexdigest()
 
     def get(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         model: str,
         temperature: float,
-    ) -> Optional[str]:
+    ) -> str | None:
         """获取缓存的响应"""
         key = self._generate_key(messages, model, temperature)
 
@@ -171,7 +177,7 @@ class LLMResponseCache:
 
     def set(
         self,
-        messages: List[Dict[str, str]],
+        messages: list[dict[str, str]],
         model: str,
         temperature: float,
         response: str,
@@ -183,10 +189,7 @@ class LLMResponseCache:
             # 检查容量
             if len(self._cache) >= self.max_size:
                 # 删除最旧的条目
-                oldest_key = min(
-                    self._cache.keys(),
-                    key=lambda k: self._cache[k]["timestamp"]
-                )
+                oldest_key = min(self._cache.keys(), key=lambda k: self._cache[k]["timestamp"])
                 del self._cache[oldest_key]
 
             self._cache[key] = {
@@ -199,14 +202,15 @@ class LLMResponseCache:
         with self._lock:
             self._cache.clear()
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """获取缓存统计"""
         with self._lock:
             current_time = time.time()
 
             # 清理过期条目
             expired_keys = [
-                k for k, v in self._cache.items()
+                k
+                for k, v in self._cache.items()
                 if current_time - v["timestamp"] > self.ttl_seconds
             ]
             for k in expired_keys:
@@ -228,21 +232,21 @@ class LLMClientPool:
     """
 
     def __init__(self):
-        self._chat_clients: Dict[str, ChatOpenAI] = {}
-        self._embedding_clients: Dict[str, OpenAIEmbeddings] = {}
-        self._rate_limiters: Dict[str, RateLimiter] = {}
-        self._cache: Optional[LLMResponseCache] = None
+        self._chat_clients: dict[str, ChatOpenAI] = {}
+        self._embedding_clients: dict[str, OpenAIEmbeddings] = {}
+        self._rate_limiters: dict[str, RateLimiter] = {}
+        self._cache: LLMResponseCache | None = None
         self._lock = Lock()
 
         # 请求队列（用于排队处理）
         self._request_queue: asyncio.Queue = None
-        self._queue_processor_task: Optional[asyncio.Task] = None
+        self._queue_processor_task: asyncio.Task | None = None
 
     def get_chat_client(
         self,
-        model: Optional[str] = None,
+        model: str | None = None,
         temperature: float = 0.0,
-        config: Optional[LLMClientConfig] = None,
+        config: LLMClientConfig | None = None,
     ) -> ChatOpenAI:
         """
         获取 ChatOpenAI 客户端
@@ -285,8 +289,8 @@ class LLMClientPool:
 
     def get_embedding_client(
         self,
-        model: Optional[str] = None,
-        config: Optional[EmbeddingClientConfig] = None,
+        model: str | None = None,
+        config: EmbeddingClientConfig | None = None,
     ) -> OpenAIEmbeddings:
         """
         获取 OpenAIEmbeddings 客户端
@@ -340,11 +344,11 @@ class LLMClientPool:
                 )
                 logger.info(f"LLM 响应缓存初始化 (max_size={max_size}, ttl={ttl_seconds}s)")
 
-    def get_cache(self) -> Optional[LLMResponseCache]:
+    def get_cache(self) -> LLMResponseCache | None:
         """获取响应缓存"""
         return self._cache
 
-    def warm_up(self, models: Optional[List[str]] = None):
+    def warm_up(self, models: list[str] | None = None):
         """
         预热客户端
 
@@ -363,7 +367,7 @@ class LLMClientPool:
 
         logger.info(f"LLM 客户端预热完成: {models}")
 
-    def get_stats(self) -> Dict[str, Any]:
+    def get_stats(self) -> dict[str, Any]:
         """获取连接池统计"""
         with self._lock:
             stats = {
@@ -396,7 +400,7 @@ class LLMClientPool:
 
 
 # ==================== 全局连接池 ====================
-_llm_pool: Optional[LLMClientPool] = None
+_llm_pool: LLMClientPool | None = None
 
 
 def get_llm_pool() -> LLMClientPool:
@@ -412,14 +416,14 @@ def get_llm_pool() -> LLMClientPool:
 
 
 def get_chat_client(
-    model: Optional[str] = None,
+    model: str | None = None,
     temperature: float = 0.0,
 ) -> ChatOpenAI:
     """获取 ChatOpenAI 客户端"""
     return get_llm_pool().get_chat_client(model, temperature)
 
 
-def get_embedding_client(model: Optional[str] = None) -> OpenAIEmbeddings:
+def get_embedding_client(model: str | None = None) -> OpenAIEmbeddings:
     """获取 OpenAIEmbeddings 客户端"""
     return get_llm_pool().get_embedding_client(model)
 
@@ -427,7 +431,7 @@ def get_embedding_client(model: Optional[str] = None) -> OpenAIEmbeddings:
 # ==================== 异步调用包装 ====================
 async def call_llm_with_rate_limit(
     client: ChatOpenAI,
-    messages: List[Dict[str, str]],
+    messages: list[dict[str, str]],
     use_cache: bool = True,
 ) -> str:
     """
@@ -460,16 +464,12 @@ async def call_llm_with_rate_limit(
 
     if rate_limiter:
         # 异步等待获取许可
-        await asyncio.get_event_loop().run_in_executor(
-            None, rate_limiter.acquire
-        )
+        await asyncio.get_event_loop().run_in_executor(None, rate_limiter.acquire)
 
     # 3. 调用 LLM
     try:
         # 构建提示词
-        prompt = ChatPromptTemplate.from_messages(
-            [(m["role"], m["content"]) for m in messages]
-        )
+        prompt = ChatPromptTemplate.from_messages([(m["role"], m["content"]) for m in messages])
         chain = prompt | client
 
         response = await chain.ainvoke({})
@@ -488,8 +488,8 @@ async def call_llm_with_rate_limit(
 
 async def call_embedding_with_rate_limit(
     client: OpenAIEmbeddings,
-    texts: List[str],
-) -> List[List[float]]:
+    texts: list[str],
+) -> list[list[float]]:
     """
     带速率限制的 Embedding 调用
 
@@ -507,9 +507,7 @@ async def call_embedding_with_rate_limit(
     rate_limiter = pool.get_rate_limiter(client_key)
 
     if rate_limiter:
-        await asyncio.get_event_loop().run_in_executor(
-            None, rate_limiter.acquire
-        )
+        await asyncio.get_event_loop().run_in_executor(None, rate_limiter.acquire)
 
     try:
         embeddings = await client.aembed_documents(texts)
@@ -521,7 +519,7 @@ async def call_embedding_with_rate_limit(
 
 
 # ==================== 装饰器 ====================
-def with_llm_rate_limit(model: Optional[str] = None):
+def with_llm_rate_limit(model: str | None = None):
     """
     LLM 速率限制装饰器
 
@@ -533,6 +531,7 @@ def with_llm_rate_limit(model: Optional[str] = None):
         ...
     ```
     """
+
     def decorator(func: Callable):
         @wraps(func)
         async def wrapper(*args, **kwargs):
@@ -543,13 +542,12 @@ def with_llm_rate_limit(model: Optional[str] = None):
             rate_limiter = pool.get_rate_limiter(client_key)
 
             if rate_limiter:
-                await asyncio.get_event_loop().run_in_executor(
-                    None, rate_limiter.acquire
-                )
+                await asyncio.get_event_loop().run_in_executor(None, rate_limiter.acquire)
 
             return await func(*args, **kwargs)
 
         return wrapper
+
     return decorator
 
 

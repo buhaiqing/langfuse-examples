@@ -4,10 +4,13 @@ Feedback collection for MCP Langfuse Observability.
 Provides user satisfaction signal collection, aggregation, and analysis.
 """
 
+import logging
 from typing import Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+
+logger = logging.getLogger(__name__)
 
 
 class FeedbackType(Enum):
@@ -25,7 +28,7 @@ class Feedback:
 
     trace_id: str
     feedback_type: FeedbackType
-    value: Any
+    value: Optional[Any]
     comment: Optional[str] = None
     user_id: Optional[str] = None
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
@@ -88,7 +91,7 @@ class FeedbackCollector:
                     metadata=metadata,
                 )
             except Exception as e:
-                print(f"Failed to send acceptance to Langfuse: {e}")
+                logger.error("Failed to send acceptance to Langfuse: %s", e)
 
         return feedback
 
@@ -143,7 +146,7 @@ class FeedbackCollector:
                     metadata=fb_metadata,
                 )
             except Exception as e:
-                print(f"Failed to send rejection to Langfuse: {e}")
+                logger.error("Failed to send rejection to Langfuse: %s", e)
 
         return feedback
 
@@ -199,7 +202,7 @@ class FeedbackCollector:
                     metadata={**(metadata or {}), "scale": scale},
                 )
             except Exception as e:
-                print(f"Failed to send rating to Langfuse: {e}")
+                logger.error("Failed to send rating to Langfuse: %s", e)
 
         return feedback
 
@@ -248,7 +251,7 @@ class FeedbackCollector:
                     metadata=metadata,
                 )
             except Exception as e:
-                print(f"Failed to send comment to Langfuse: {e}")
+                logger.error("Failed to send comment to Langfuse: %s", e)
 
         return feedback
 

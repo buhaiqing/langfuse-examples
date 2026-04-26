@@ -28,40 +28,6 @@ class TestSessionManagerEdgeCases:
         """Clear session after each test."""
         clear_session()
 
-    def test_propagate_session_ctx_without_session(self):
-        """Test propagate_session_ctx when no session is set."""
-        # Ensure no session
-        clear_session()
-        
-        ctx_manager = SessionManager.propagate_session_ctx()
-        
-        # Should return nullcontext when no session_id
-        from contextlib import nullcontext
-        assert isinstance(ctx_manager, nullcontext)
-
-    def test_propagate_session_ctx_with_empty_session(self):
-        """Test propagate_session_ctx with empty session dict."""
-        _session_context.set({})
-        
-        ctx_manager = SessionManager.propagate_session_ctx()
-        
-        from contextlib import nullcontext
-        assert isinstance(ctx_manager, nullcontext)
-
-    def test_propagate_session_ctx_with_session_no_user(self):
-        """Test propagate_session_ctx with session but no user_id."""
-        _session_context.set({
-            "session_id": "session-only",
-            "user_id": None,
-            "metadata": {}
-        })
-
-        # Should work without error
-        ctx_manager = SessionManager.propagate_session_ctx()
-        # Verify it's not nullcontext (has session_id)
-        from contextlib import nullcontext
-        assert not isinstance(ctx_manager, nullcontext)
-
     def test_get_session_id_when_no_session(self):
         """Test get_session_id when no session is set."""
         clear_session()

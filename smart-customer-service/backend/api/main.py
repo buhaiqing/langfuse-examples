@@ -1,14 +1,14 @@
 """智能客服系统 API 主入口"""
 
+from core.config import settings
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from core.config import settings
-from api.v1.routes import intent, rag, tools, conversations
 from api.middleware.auth import APIKeyAuthMiddleware
-from api.middleware.rate_limit import RateLimitMiddleware as CustomRateLimitMiddleware
-from api.middleware.logging import RequestLoggingMiddleware, setup_logging
 from api.middleware.exception_handlers import register_exception_handlers
+from api.middleware.logging import RequestLoggingMiddleware, setup_logging
+from api.middleware.rate_limit import RateLimitMiddleware as CustomRateLimitMiddleware
+from api.v1.routes import conversations, intent, rag, tools
 
 
 # ==================== 应用初始化 ====================

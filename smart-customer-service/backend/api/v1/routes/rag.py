@@ -1,12 +1,11 @@
 """RAG 知识库 API 路由"""
 
-from fastapi import APIRouter, status
+from typing import Any
+
+from core.exceptions import ErrorCode, RAGQueryFailed, ServiceUnavailableException
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
-
-from services.rag_service import rag_service, RAGQueryResult
-from core.exceptions import RAGQueryFailed, ServiceUnavailableException, ErrorCode
-
+from services.rag_service import rag_service
 
 router = APIRouter(prefix="/rag", tags=["RAG 知识库"])
 
@@ -16,7 +15,7 @@ class RAGQueryRequest(BaseModel):
 
     query: str = Field(..., description="用户查询", min_length=1, max_length=500)
     session_id: str = Field(..., description="会话 ID")
-    filters: Optional[Dict[str, Any]] = Field(default=None, description="过滤条件")
+    filters: dict[str, Any] | None = Field(default=None, description="过滤条件")
     top_k: int = Field(default=3, description="返回文档数量", ge=1, le=10)
 
 
@@ -24,8 +23,8 @@ class RAGQueryResponse(BaseModel):
     """RAG 查询响应"""
 
     success: bool
-    data: Optional[Dict[str, Any]] = None
-    message: Optional[str] = None
+    data: dict[str, Any] | None = None
+    message: str | None = None
 
 
 @router.post("/query", response_model=RAGQueryResponse)
@@ -66,7 +65,7 @@ async def query_rag(request: RAGQueryRequest):
         raise RAGQueryFailed(
             message=f"RAG 查询失败：{str(e)}",
             code=ErrorCode.RAG_QUERY_FAILED,
-        )
+        ) from e
 
 
 @router.get("/documents")

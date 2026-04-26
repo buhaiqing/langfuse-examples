@@ -4,10 +4,13 @@ Notification channel implementations for alerting.
 Implements WeCom (企业微信), Email, PagerDuty notification handlers.
 """
 
+import logging
 from typing import Optional
 import json
 import urllib.request
 from src.observability.alerting import Alert, AlertChannel, AlertSeverity
+
+logger = logging.getLogger(__name__)
 
 
 class WeComNotifier:
@@ -57,7 +60,7 @@ class WeComNotifier:
         try:
             urllib.request.urlopen(req, timeout=10)
         except Exception as e:
-            print(f"Failed to send WeCom notification: {e}")
+            logger.error("Failed to send WeCom notification: %s", e)
 
 
 class SlackNotifier:
@@ -115,7 +118,7 @@ class SlackNotifier:
         try:
             urllib.request.urlopen(req, timeout=10)
         except Exception as e:
-            print(f"Failed to send Slack notification: {e}")
+            logger.error("Failed to send Slack notification: %s", e)
 
 
 class EmailNotifier:
@@ -152,7 +155,7 @@ Message: {alert.message}
             with smtplib.SMTP(self.smtp_host, self.smtp_port, timeout=10) as server:
                 server.sendmail(self.sender, self.recipients, msg.as_string())
         except Exception as e:
-            print(f"Failed to send email notification: {e}")
+            logger.error("Failed to send email notification: %s", e)
 
 
 class PagerDutyNotifier:
@@ -200,15 +203,15 @@ class PagerDutyNotifier:
         try:
             urllib.request.urlopen(req, timeout=10)
         except Exception as e:
-            print(f"Failed to send PagerDuty notification: {e}")
+            logger.error("Failed to send PagerDuty notification: %s", e)
 
 
 class WebhookNotifier:
     """Generic webhook notification handler."""
 
-    def __init__(self, webhook_url: str, headers: Optional[dict] = None):
+    def __init__(self, webhook_url: str, headers: Optional[dict[str, str]] = None):
         self.webhook_url = webhook_url
-        self.headers = headers or {"Content-Type": "application/json"}
+        self.headers: dict[str, str] = headers or {"Content-Type": "application/json"}
 
     def __call__(self, alert: Alert) -> None:
         """Send alert to webhook."""
@@ -232,10 +235,10 @@ class WebhookNotifier:
         try:
             urllib.request.urlopen(req, timeout=10)
         except Exception as e:
-            print(f"Failed to send webhook notification: {e}")
+            logger.error("Failed to send webhook notification: %s", e)
 
 
-def notifiers():
+def notifiers() -> dict[str, type]:
     """Export all notification classes."""
     return {
         "WeComNotifier": WeComNotifier,

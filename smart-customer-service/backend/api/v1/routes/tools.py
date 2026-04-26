@@ -1,16 +1,13 @@
 """工具调用 API 路由"""
 
-from fastapi import APIRouter
-from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
+from typing import Any
 
-from utils.api_client import api_client, JiraClient, ZendeskClient
 from core.exceptions import (
     ToolExecutionFailed,
     ValidationException,
-    ErrorCode,
 )
-
+from fastapi import APIRouter
+from pydantic import BaseModel, Field
 
 router = APIRouter(prefix="/tools", tags=["工具调用"])
 
@@ -19,7 +16,7 @@ class ToolExecuteRequest(BaseModel):
     """工具执行请求"""
 
     tool_name: str = Field(..., description="工具名称")
-    parameters: Dict[str, Any] = Field(..., description="工具参数")
+    parameters: dict[str, Any] = Field(..., description="工具参数")
     session_id: str = Field(..., description="会话 ID")
 
 
@@ -27,8 +24,8 @@ class ToolExecuteResponse(BaseModel):
     """工具执行响应"""
 
     success: bool
-    data: Optional[Dict[str, Any]] = None
-    message: Optional[str] = None
+    data: dict[str, Any] | None = None
+    message: str | None = None
 
 
 @router.post("/execute", response_model=ToolExecuteResponse)
@@ -78,10 +75,10 @@ async def execute_tool(request: ToolExecuteRequest):
         raise ToolExecutionFailed(
             tool_name=request.tool_name,
             message=str(e),
-        )
+        ) from e
 
 
-async def _query_ticket_status(params: Dict[str, Any]) -> Dict[str, Any]:
+async def _query_ticket_status(params: dict[str, Any]) -> dict[str, Any]:
     """查询工单状态"""
     ticket_id = params.get("ticket_id")
     system = params.get("system", "jira")
@@ -97,7 +94,7 @@ async def _query_ticket_status(params: Dict[str, Any]) -> Dict[str, Any]:
         return {"status": "mock", "ticket_id": ticket_id}
 
 
-async def _check_account_status(params: Dict[str, Any]) -> Dict[str, Any]:
+async def _check_account_status(params: dict[str, Any]) -> dict[str, Any]:
     """检查账户状态"""
     user_id = params.get("user_id")
     # TODO: 实现真实的账户系统对接
@@ -108,7 +105,7 @@ async def _check_account_status(params: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-async def _get_product_info(params: Dict[str, Any]) -> Dict[str, Any]:
+async def _get_product_info(params: dict[str, Any]) -> dict[str, Any]:
     """获取产品信息"""
     product_name = params.get("product_name")
     # TODO: 实现真实的产品信息系统对接

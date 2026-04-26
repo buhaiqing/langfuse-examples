@@ -7,20 +7,15 @@ LLM 客户端池测试
 - 响应缓存
 """
 
-import pytest
-import asyncio
 import time
-from unittest.mock import MagicMock, AsyncMock, patch
 
 from core.llm_client_pool import (
-    LLMClientConfig,
-    EmbeddingClientConfig,
-    RateLimiter,
-    LLMResponseCache,
     LLMClientPool,
-    get_llm_pool,
+    LLMResponseCache,
+    RateLimiter,
     get_chat_client,
     get_embedding_client,
+    get_llm_pool,
 )
 
 
@@ -39,7 +34,7 @@ class TestRateLimiter:
         limiter = RateLimiter(requests_per_minute=10)
 
         # 连续获取多次许可
-        for i in range(5):
+        for _i in range(5):
             result = limiter.acquire(timeout=0.1)
             assert result is True
 
@@ -48,7 +43,7 @@ class TestRateLimiter:
         limiter = RateLimiter(requests_per_minute=5)
 
         # 先消耗 5 次许可
-        for i in range(5):
+        for _i in range(5):
             limiter.acquire(timeout=0.1)
 
         # 第 6 次应该失败（timeout=0 表示不等待）
@@ -60,7 +55,7 @@ class TestRateLimiter:
         limiter = RateLimiter(requests_per_minute=10)
 
         # 发送几次请求
-        for i in range(3):
+        for _i in range(3):
             limiter.acquire(timeout=0.1)
 
         current_rate = limiter.get_current_rate()

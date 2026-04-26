@@ -1,11 +1,10 @@
 """意图识别 API 路由"""
 
-from fastapi import APIRouter, HTTPException, status
+from typing import Any
+
+from fastapi import APIRouter
 from pydantic import BaseModel, Field
-from typing import Optional, Dict, Any, List
-
-from services.intent_recognition import intent_service, IntentRecognitionResult
-
+from services.intent_recognition import intent_service
 
 router = APIRouter(prefix="/intent", tags=["意图识别"])
 
@@ -16,16 +15,16 @@ class IntentRecognizeRequest(BaseModel):
     user_message: str = Field(..., description="用户消息", min_length=1, max_length=500)
     session_id: str = Field(..., description="会话 ID")
     user_id: str = Field(..., description="用户 ID")
-    channel: Optional[str] = Field(default="web_chat", description="渠道")
-    context: Optional[Dict[str, Any]] = Field(default=None, description="上下文信息")
+    channel: str | None = Field(default="web_chat", description="渠道")
+    context: dict[str, Any] | None = Field(default=None, description="上下文信息")
 
 
 class IntentRecognizeResponse(BaseModel):
     """意图识别响应"""
 
     success: bool
-    data: Optional[Dict[str, Any]] = None
-    message: Optional[str] = None
+    data: dict[str, Any] | None = None
+    message: str | None = None
 
 
 @router.post("/recognize", response_model=IntentRecognizeResponse)

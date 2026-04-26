@@ -5,6 +5,7 @@ Provides time series anomaly detection with Prophet and multivariate
 anomaly detection with PyOD (Isolation Forest, LOF).
 """
 
+import logging
 from typing import Dict, Any, List, Optional, Set
 from datetime import datetime, timezone
 import numpy as np
@@ -16,6 +17,8 @@ from sklearn.preprocessing import StandardScaler
 
 from src.observability.alerting import AlertSeverity
 from src.observability.metrics_collector import MetricsCollector
+
+logger = logging.getLogger(__name__)
 
 
 class TimeSeriesAnomalyDetector:
@@ -47,9 +50,9 @@ class TimeSeriesAnomalyDetector:
                 - y: metric value
         """
         if len(historical_data) < 50:
-            print(
-                f"Warning: Insufficient data for {metric_name} "
-                f"({len(historical_data)} points, need at least 50)"
+            logger.warning(
+                "Insufficient data for %s (%d points, need at least 50)",
+                metric_name, len(historical_data),
             )
             return
 
@@ -159,9 +162,9 @@ class MultivariateAnomalyDetector:
                 Features should be: [success_rate, latency_p95, request_rate, satisfaction]
         """
         if len(historical_features) < 50:
-            print(
-                f"Warning: Insufficient data for training "
-                f"({len(historical_features)} samples, need at least 50)"
+            logger.warning(
+                "Insufficient data for training (%d samples, need at least 50)",
+                len(historical_features),
             )
             return
 
@@ -254,7 +257,7 @@ class AnomalyDetector:
         Args:
             hours_of_history: Number of hours of historical data to use.
         """
-        print(f"Training anomaly detection models ({hours_of_history}h history)...")
+        logger.info("Training anomaly detection models (%dh history)...", hours_of_history)
 
         # Train time series models for each metric
         metrics = ['success_rate', 'latency_p95', 'request_rate']
@@ -268,27 +271,23 @@ class AnomalyDetector:
                 if len(historical_data) >= 50:
                     self.ts_detector.train(metric, historical_data)
                     self._trained_metrics.add(metric)
-                    print(f"  ✓ Trained model for {metric} "
-                          f"({len(historical_data)} data points)")
+                    logger.info("Trained model for %s (%d data points)", metric, len(historical_data))
                 else:
-                    print(f"  ✗ Insufficient data for {metric} "
-                          f"({len(historical_data)} points)")
+                    logger.warning("Insufficient data for %s (%d points)", metric, len(historical_data))
                     
             except Exception as e:
-                print(f"  ✗ Failed to train model for {metric}: {e}")
+                logger.error("Failed to train model for %s: %s", metric, e)
 
         # Train multivariate model
         try:
             features = self._prepare_multivariate_features(hours_of_history)
             if len(features) >= 50:
                 self.mv_detector.train(features)
-                print(f"  ✓ Trained multivariate model "
-                      f"({len(features)} samples)")
+                logger.info("Trained multivariate model (%d samples)", len(features))
             else:
-                print(f"  ✗ Insufficient data for multivariate model "
-                      f"({len(features)} samples)")
+                logger.warning("Insufficient data for multivariate model (%d samples)", len(features))
         except Exception as e:
-            print(f"  ✗ Failed to train multivariate model: {e}")
+            logger.error("Failed to train multivariate model: %s", e)
 
     def detect_anomalies(self) -> List[Dict[str, Any]]:
         """
@@ -315,7 +314,7 @@ class AnomalyDetector:
                         **result
                     })
             except Exception as e:
-                print(f"Failed to detect anomalies for {metric}: {e}")
+                logger.error("Failed to detect anomalies for %s: %s", metric, e)
 
         # 2. Multivariate detection
         try:
@@ -335,7 +334,7 @@ class AnomalyDetector:
                     **mv_result
                 })
         except Exception as e:
-            print(f"Failed to perform multivariate detection: {e}")
+            logger.error("Failed to perform multivariate detection: %s", e)
 
         return anomalies
 

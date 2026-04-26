@@ -2,9 +2,9 @@
 Unit tests for Phase 2 session-related decorators.
 
 Tests for:
-- @observe_tool decorator with session context propagation
+- @observe_tool decorator with real Langfuse trace/span creation
 - @track_session decorator
-- Integration with propagate_attributes
+- Integration with session context propagation
 """
 
 import pytest
@@ -25,59 +25,134 @@ class TestObserveToolDecorator:
         """Clear session after each test."""
         clear_session()
 
-    def test_observe_tool_without_session(self):
-        """Test observe_tool when no session is set."""
-        call_count = {"count": 0}
+    @patch("src.observability.decorators.get_langfuse_client")
+    def test_observe_tool_creates_trace_and_span(self, mock_get_client):
+        """Test observe_tool creates a real Langfuse trace with span."""
+        mock_client = MagicMock()
+        mock_trace = MagicMock()
+        mock_span = MagicMock()
+        mock_trace.__enter__ = Mock(return_value=mock_trace)
+        mock_trace.__exit__ = Mock(return_value=False)
+        mock_span.__enter__ = Mock(return_value=mock_span)
+        mock_span.__exit__ = Mock(return_value=False)
+        mock_trace.span.return_value = mock_span
+        mock_client.trace.return_value = mock_trace
+        mock_get_client.return_value = mock_client
 
         @observe_tool(name="test_tool")
         def test_func(x: int) -> int:
-            call_count["count"] += 1
             return x * 2
 
         result = test_func(5)
-        
-        assert result == 10
-        assert call_count["count"] == 1
-        # Should execute without error even without session
 
-    def test_observe_tool_with_session_context(self):
-        """Test observe_tool propagates session context."""
+        assert result == 10
+        mock_client.trace.assert_called_once()
+        trace_kwargs = mock_client.trace.call_args[1]
+        assert trace_kwargs["name"] == "test_tool"
+        mock_trace.span.assert_called_once()
+        span_kwargs = mock_trace.span.call_args[1]
+        assert span_kwargs["name"] == "test_tool"
+
+    @patch("src.observability.decorators.get_langfuse_client")
+    def test_observe_tool_propagates_session_context(self, mock_get_client):
+        """Test observe_tool propagates session_id and user_id to trace."""
+        mock_client = MagicMock()
+        mock_trace = MagicMock()
+        mock_span = MagicMock()
+        mock_trace.__enter__ = Mock(return_value=mock_trace)
+        mock_trace.__exit__ = Mock(return_value=False)
+        mock_span.__enter__ = Mock(return_value=mock_span)
+        mock_span.__exit__ = Mock(return_value=False)
+        mock_trace.span.return_value = mock_span
+        mock_client.trace.return_value = mock_trace
+        mock_get_client.return_value = mock_client
+
         set_session(session_id="test-session-123", user_id="user-456")
 
         @observe_tool(name="test_tool_with_session")
         def test_func(data: str) -> str:
-            # Verify session is accessible during execution
-            current_session = SessionManager.get_session_id()
-            current_user = SessionManager.get_user_id()
-            return f"{data}|{current_session}|{current_user}"
+            return data
 
         result = test_func("hello")
-        
-        assert "test-session-123" in result
-        assert "user-456" in result
 
-    @patch('src.observability.decorators.propagate_attributes')
-    def test_observe_tool_calls_propagate_attributes(self, mock_propagate):
-        """Test that observe_tool calls propagate_attributes with correct params."""
-        mock_context = MagicMock()
-        mock_propagate.return_value.__enter__ = Mock(return_value=None)
-        mock_propagate.return_value.__exit__ = Mock(return_value=None)
+        assert result == "hello"
+        trace_kwargs = mock_client.trace.call_args[1]
+        assert trace_kwargs["session_id"] == "test-session-123"
+        assert trace_kwargs["user_id"] == "user-456"
 
-        set_session(session_id="session-abc", user_id="user-xyz", metadata={"key": "value"})
+    @patch("src.observability.decorators.get_langfuse_client")
+    def test_observe_tool_updates_span_with_output(self, mock_get_client):
+        """Test observe_tool updates span with function output on success."""
+        mock_client = MagicMock()
+        mock_trace = MagicMock()
+        mock_span = MagicMock()
+        mock_trace.__enter__ = Mock(return_value=mock_trace)
+        mock_trace.__exit__ = Mock(return_value=False)
+        mock_span.__enter__ = Mock(return_value=mock_span)
+        mock_span.__exit__ = Mock(return_value=False)
+        mock_trace.span.return_value = mock_span
+        mock_client.trace.return_value = mock_trace
+        mock_get_client.return_value = mock_client
 
-        @observe_tool(name="tracked_tool")
-        def test_func():
-            return "result"
+        @observe_tool(name="output_tool")
+        def test_func() -> dict:
+            return {"status": "ok"}
 
         result = test_func()
-        
-        assert result == "result"
-        # Verify propagate_attributes was called
-        mock_propagate.assert_called_once()
-        call_kwargs = mock_propagate.call_args[1]
-        assert call_kwargs["session_id"] == "session-abc"
-        assert call_kwargs["user_id"] == "user-xyz"
-        assert call_kwargs["metadata"] == {"key": "value"}
+
+        assert result == {"status": "ok"}
+        mock_span.update.assert_called_once_with(output={"status": "ok"})
+
+    @patch("src.observability.decorators.get_langfuse_client")
+    def test_observe_tool_records_error_in_span(self, mock_get_client):
+        """Test observe_tool records error in span when function raises."""
+        mock_client = MagicMock()
+        mock_trace = MagicMock()
+        mock_span = MagicMock()
+        mock_trace.__enter__ = Mock(return_value=mock_trace)
+        mock_trace.__exit__ = Mock(return_value=False)
+        mock_span.__enter__ = Mock(return_value=mock_span)
+        mock_span.__exit__ = Mock(return_value=False)
+        mock_trace.span.return_value = mock_span
+        mock_client.trace.return_value = mock_trace
+        mock_get_client.return_value = mock_client
+
+        @observe_tool(name="failing_tool")
+        def failing_func():
+            raise ValueError("Test error")
+
+        with pytest.raises(ValueError, match="Test error"):
+            failing_func()
+
+        mock_span.update.assert_called_once_with(
+            level="ERROR",
+            status_message="Test error",
+        )
+
+    def test_observe_tool_without_client_falls_through(self):
+        """Test observe_tool calls function directly when no client available."""
+        with patch("src.observability.decorators.get_langfuse_client", return_value=None):
+            @observe_tool(name="no_client_tool")
+            def test_func(x: int) -> int:
+                return x + 1
+
+            result = test_func(5)
+            assert result == 6
+
+    def test_observe_tool_without_session(self):
+        """Test observe_tool when no session is set."""
+        call_count = {"count": 0}
+
+        with patch("src.observability.decorators.get_langfuse_client", return_value=None):
+            @observe_tool(name="test_tool")
+            def test_func(x: int) -> int:
+                call_count["count"] += 1
+                return x * 2
+
+            result = test_func(5)
+
+        assert result == 10
+        assert call_count["count"] == 1
 
     def test_observe_tool_preserves_function_metadata(self):
         """Test that decorator preserves function name and docstring."""
@@ -123,6 +198,19 @@ class TestTrackSessionDecorator:
         assert test_func._langfuse_session == "session-only"
         assert test_func._langfuse_user is None
 
+    def test_track_session_sets_and_clears_context(self):
+        """Test track_session sets context during execution and clears after."""
+        @track_session(session_id="temp-session", user_id="temp-user")
+        def test_func():
+            session_id = SessionManager.get_session_id()
+            user_id = SessionManager.get_user_id()
+            return (session_id, user_id)
+
+        result = test_func()
+        assert result == ("temp-session", "temp-user")
+
+        assert SessionManager.get_session_id() is None
+
     def test_track_session_preserves_functionality(self):
         """Test track_session doesn't break function execution."""
         @track_session("session-123", "user-456")
@@ -136,6 +224,61 @@ class TestTrackSessionDecorator:
 class TestTrackPromptVersionDecorator:
     """Tests for @track_prompt_version decorator."""
 
+    @patch("src.observability.decorators.get_langfuse_client")
+    def test_track_prompt_version_creates_trace_with_metadata(self, mock_get_client):
+        """Test track_prompt_version creates trace with prompt metadata."""
+        mock_client = MagicMock()
+        mock_trace = MagicMock()
+        mock_span = MagicMock()
+        mock_trace.__enter__ = Mock(return_value=mock_trace)
+        mock_trace.__exit__ = Mock(return_value=False)
+        mock_span.__enter__ = Mock(return_value=mock_span)
+        mock_span.__exit__ = Mock(return_value=False)
+        mock_trace.span.return_value = mock_span
+        mock_client.trace.return_value = mock_trace
+        mock_get_client.return_value = mock_client
+
+        @track_prompt_version(prompt_id="test-prompt", version="v3.0")
+        def test_func():
+            return "done"
+
+        result = test_func()
+
+        assert result == "done"
+        trace_kwargs = mock_client.trace.call_args[1]
+        assert trace_kwargs["metadata"]["prompt_id"] == "test-prompt"
+        assert trace_kwargs["metadata"]["prompt_version"] == "v3.0"
+        assert trace_kwargs["version"] == "v3.0"
+
+    @patch("src.observability.decorators.get_active_prompt_version")
+    @patch("src.observability.decorators.get_langfuse_client")
+    def test_track_prompt_version_auto_fetches_version(
+        self, mock_get_client, mock_get_active_version
+    ):
+        """Test track_prompt_version auto-fetches version when not specified."""
+        mock_client = MagicMock()
+        mock_trace = MagicMock()
+        mock_span = MagicMock()
+        mock_trace.__enter__ = Mock(return_value=mock_trace)
+        mock_trace.__exit__ = Mock(return_value=False)
+        mock_span.__enter__ = Mock(return_value=mock_span)
+        mock_span.__exit__ = Mock(return_value=False)
+        mock_trace.span.return_value = mock_span
+        mock_client.trace.return_value = mock_trace
+        mock_get_client.return_value = mock_client
+        mock_get_active_version.return_value = "auto-version-1.0"
+
+        @track_prompt_version(prompt_id="auto-prompt", version=None)
+        def test_func():
+            return "auto-result"
+
+        result = test_func()
+
+        assert result == "auto-result"
+        mock_get_active_version.assert_called_once_with("auto-prompt")
+        trace_kwargs = mock_client.trace.call_args[1]
+        assert trace_kwargs["metadata"]["prompt_version"] == "auto-version-1.0"
+
     def test_track_prompt_version_sets_attributes(self):
         """Test track_prompt_version decorator sets prompt attributes."""
         @track_prompt_version(prompt_id="prompt-abc", version="v2.0")
@@ -148,82 +291,13 @@ class TestTrackPromptVersionDecorator:
 
     def test_track_prompt_version_preserves_functionality(self):
         """Test track_prompt_version doesn't break function execution."""
-        @track_prompt_version("prompt-123", "v1.5")
-        def process_data(data: str) -> str:
-            return data.upper()
+        with patch("src.observability.decorators.get_langfuse_client", return_value=None):
+            @track_prompt_version("prompt-123", "v1.5")
+            def process_data(data: str) -> str:
+                return data.upper()
 
-        result = process_data("hello")
-        assert result == "HELLO"
-
-    @patch('src.observability.decorators.propagate_attributes')
-    def test_track_prompt_version_with_explicit_version(self, mock_propagate):
-        """Test track_prompt_version with explicitly provided version."""
-        mock_context = MagicMock()
-        mock_propagate.return_value.__enter__ = Mock(return_value=None)
-        mock_propagate.return_value.__exit__ = Mock(return_value=None)
-
-        @track_prompt_version(prompt_id="test-prompt", version="v3.0")
-        def test_func():
-            return "done"
-
-        result = test_func()
-        
-        assert result == "done"
-        # Verify propagate_attributes was called with correct metadata
-        mock_propagate.assert_called_once()
-        call_kwargs = mock_propagate.call_args[1]
-        assert call_kwargs["metadata"]["prompt_id"] == "test-prompt"
-        assert call_kwargs["metadata"]["prompt_version"] == "v3.0"
-
-    @patch('src.observability.decorators.get_active_prompt_version')
-    @patch('src.observability.decorators.propagate_attributes')
-    def test_track_prompt_version_auto_fetches_version(
-        self, mock_propagate, mock_get_active_version
-    ):
-        """Test track_prompt_version auto-fetches version when not specified."""
-        # Setup mocks
-        mock_context = MagicMock()
-        mock_propagate.return_value.__enter__ = Mock(return_value=None)
-        mock_propagate.return_value.__exit__ = Mock(return_value=None)
-        mock_get_active_version.return_value = "auto-version-1.0"
-
-        @track_prompt_version(prompt_id="auto-prompt", version=None)
-        def test_func():
-            return "auto-result"
-
-        result = test_func()
-        
-        assert result == "auto-result"
-        # Verify get_active_prompt_version was called
-        mock_get_active_version.assert_called_once_with("auto-prompt")
-        # Verify propagate_attributes was called with fetched version
-        mock_propagate.assert_called_once()
-        call_kwargs = mock_propagate.call_args[1]
-        assert call_kwargs["metadata"]["prompt_id"] == "auto-prompt"
-        assert call_kwargs["metadata"]["prompt_version"] == "auto-version-1.0"
-
-    @patch('src.observability.decorators.get_active_prompt_version')
-    @patch('src.observability.decorators.propagate_attributes')
-    def test_track_prompt_version_default_parameter(
-        self, mock_propagate, mock_get_active_version
-    ):
-        """Test track_prompt_version with default version parameter (None)."""
-        mock_context = MagicMock()
-        mock_propagate.return_value.__enter__ = Mock(return_value=None)
-        mock_propagate.return_value.__exit__ = Mock(return_value=None)
-        mock_get_active_version.return_value = "default-v2.0"
-
-        # When version is not provided, it defaults to None
-        @track_prompt_version(prompt_id="default-prompt")
-        def test_func():
-            return "default-result"
-
-        result = test_func()
-        
-        assert result == "default-result"
-        mock_get_active_version.assert_called_once_with("default-prompt")
-        call_kwargs = mock_propagate.call_args[1]
-        assert call_kwargs["metadata"]["prompt_version"] == "default-v2.0"
+            result = process_data("hello")
+            assert result == "HELLO"
 
 
 class TestDecoratorsIntegration:
@@ -245,18 +319,15 @@ class TestDecoratorsIntegration:
         def multi_decorated_func(x: int) -> int:
             return x * 3
 
-        # Check all decorator attributes are set
         assert hasattr(multi_decorated_func, '_langfuse_session')
         assert hasattr(multi_decorated_func, '_langfuse_prompt_id')
         assert hasattr(multi_decorated_func, '_langfuse_observed')
 
-        # Verify functionality
         result = multi_decorated_func(5)
         assert result == 15
 
     def test_decorator_with_real_session_flow(self):
         """Test decorator in realistic session flow."""
-        # Start session
         SessionManager.start_session(
             session_id="flow-session",
             user_id="flow-user",
@@ -274,7 +345,7 @@ class TestDecoratorsIntegration:
             }
 
         result = process_request("req-001")
-        
+
         assert result["request_id"] == "req-001"
         assert result["session_id"] == "flow-session"
         assert result["user_id"] == "flow-user"
@@ -291,9 +362,20 @@ class TestEdgeCases:
         """Clear session after each test."""
         clear_session()
 
-    def test_observe_tool_with_empty_session(self):
+    @patch("src.observability.decorators.get_langfuse_client")
+    def test_observe_tool_with_empty_session(self, mock_get_client):
         """Test observe_tool when session exists but has no session_id."""
-        # Manually set incomplete session
+        mock_client = MagicMock()
+        mock_trace = MagicMock()
+        mock_span = MagicMock()
+        mock_trace.__enter__ = Mock(return_value=mock_trace)
+        mock_trace.__exit__ = Mock(return_value=False)
+        mock_span.__enter__ = Mock(return_value=mock_span)
+        mock_span.__exit__ = Mock(return_value=False)
+        mock_trace.span.return_value = mock_span
+        mock_client.trace.return_value = mock_trace
+        mock_get_client.return_value = mock_client
+
         from src.observability.session import _session_context
         _session_context.set({"user_id": "user-only"})
 
@@ -301,12 +383,26 @@ class TestEdgeCases:
         def test_func():
             return "ok"
 
-        # Should not raise error
         result = test_func()
         assert result == "ok"
+        trace_kwargs = mock_client.trace.call_args[1]
+        assert "session_id" not in trace_kwargs
+        assert trace_kwargs["user_id"] == "user-only"
 
-    def test_observe_tool_with_exception(self):
+    @patch("src.observability.decorators.get_langfuse_client")
+    def test_observe_tool_with_exception(self, mock_get_client):
         """Test observe_tool when decorated function raises exception."""
+        mock_client = MagicMock()
+        mock_trace = MagicMock()
+        mock_span = MagicMock()
+        mock_trace.__enter__ = Mock(return_value=mock_trace)
+        mock_trace.__exit__ = Mock(return_value=False)
+        mock_span.__enter__ = Mock(return_value=mock_span)
+        mock_span.__exit__ = Mock(return_value=False)
+        mock_trace.span.return_value = mock_span
+        mock_client.trace.return_value = mock_trace
+        mock_get_client.return_value = mock_client
+
         @observe_tool(name="failing_tool")
         def failing_func():
             raise ValueError("Test error")
@@ -314,17 +410,23 @@ class TestEdgeCases:
         with pytest.raises(ValueError, match="Test error"):
             failing_func()
 
+        mock_span.update.assert_called_once_with(
+            level="ERROR",
+            status_message="Test error",
+        )
+
     def test_nested_session_contexts(self):
         """Test nested session context changes."""
-        @observe_tool(name="outer_tool")
-        def outer_func():
-            set_session(session_id="outer-session", user_id="outer-user")
-            
-            @observe_tool(name="inner_tool")
-            def inner_func():
-                return SessionManager.get_session_id()
-            
-            return inner_func()
+        with patch("src.observability.decorators.get_langfuse_client", return_value=None):
+            @observe_tool(name="outer_tool")
+            def outer_func():
+                set_session(session_id="outer-session", user_id="outer-user")
 
-        result = outer_func()
-        assert result == "outer-session"
+                @observe_tool(name="inner_tool")
+                def inner_func():
+                    return SessionManager.get_session_id()
+
+                return inner_func()
+
+            result = outer_func()
+            assert result == "outer-session"

@@ -1,10 +1,10 @@
 """MinIO 对象存储客户端"""
 
-from typing import List, Dict, Optional
+import io
+
+from core.config import settings
 from minio import Minio
 from minio.error import S3Error
-from core.config import settings
-import io
 
 
 class MinIOClient:
@@ -33,7 +33,7 @@ class MinIOClient:
         try:
             self.client.put_object(bucket, object_name, io.BytesIO(file_data), len(file_data))
         except S3Error as e:
-            raise Exception(f"MinIO upload failed: {e}")
+            raise Exception(f"MinIO upload failed: {e}") from e
 
     def download_file(self, bucket: str, object_name: str) -> bytes:
         """下载文件"""
@@ -41,21 +41,21 @@ class MinIOClient:
             response = self.client.get_object(bucket, object_name)
             return response.read()
         except S3Error as e:
-            raise Exception(f"MinIO download failed: {e}")
+            raise Exception(f"MinIO download failed: {e}") from e
 
     def delete_file(self, bucket: str, object_name: str):
         """删除文件"""
         try:
             self.client.remove_object(bucket, object_name)
         except S3Error as e:
-            raise Exception(f"MinIO delete failed: {e}")
+            raise Exception(f"MinIO delete failed: {e}") from e
 
-    def list_files(self, bucket: str, prefix: str = "") -> List[str]:
+    def list_files(self, bucket: str, prefix: str = "") -> list[str]:
         """列出文件"""
         try:
             objects = self.client.list_objects(bucket, prefix=prefix, recursive=True)
             return [obj.object_name for obj in objects]
-        except S3Error as e:
+        except S3Error:
             return []
 
 

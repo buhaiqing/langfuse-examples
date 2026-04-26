@@ -2,8 +2,7 @@
 
 import hashlib
 import re
-from typing import Dict, Any, Optional, List
-
+from typing import Any
 
 # 敏感字段关键词
 SENSITIVE_FIELDS = [
@@ -257,7 +256,7 @@ def mask_by_field_name(field_name: str, value: Any) -> Any:
     return value
 
 
-def detect_pii_patterns(text: str) -> List[Dict[str, Any]]:
+def detect_pii_patterns(text: str) -> list[dict[str, Any]]:
     """
     检测文本中的 PII 模式
 
@@ -311,7 +310,7 @@ def mask_text(text: str) -> str:
     return text
 
 
-def mask_dict(data: Dict[str, Any], sensitive_fields: Optional[List[str]] = None) -> Dict[str, Any]:
+def mask_dict(data: dict[str, Any], sensitive_fields: list[str] | None = None) -> dict[str, Any]:
     """
     脱敏字典中的敏感数据
 
@@ -333,11 +332,11 @@ def mask_dict(data: Dict[str, Any], sensitive_fields: Optional[List[str]] = None
             result[key] = mask_dict(value, fields)
         elif isinstance(value, list):
             result[key] = [
-                mask_dict(item, fields)
-                if isinstance(item, dict)
-                else mask_text(item)
-                if isinstance(item, str)
-                else value
+                (
+                    mask_dict(item, fields)
+                    if isinstance(item, dict)
+                    else mask_text(item) if isinstance(item, str) else value
+                )
                 for item in value
             ]
         elif isinstance(value, str):
@@ -349,7 +348,7 @@ def mask_dict(data: Dict[str, Any], sensitive_fields: Optional[List[str]] = None
     return result
 
 
-def create_masked_metadata(metadata: Dict[str, Any]) -> Dict[str, Any]:
+def create_masked_metadata(metadata: dict[str, Any]) -> dict[str, Any]:
     """
     创建脱敏后的元数据 (用于 Langfuse 追踪)
 

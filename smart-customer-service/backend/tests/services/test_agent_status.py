@@ -8,20 +8,19 @@
 - 绩效统计
 """
 
-import pytest
-import asyncio
+from datetime import timedelta
 from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime, timedelta
 
+import pytest
 from services.agent_status_service import (
-    AgentStatus,
-    AgentRole,
     AgentInfo,
-    AgentStatusChange,
     AgentPerformance,
+    AgentRole,
+    AgentStatus,
+    AgentStatusChange,
     AgentStatusService,
-    get_agent_status_service,
 )
+from utils import utcnow
 
 
 class TestAgentStatus:
@@ -119,8 +118,8 @@ class TestAgentPerformance:
         """测试绩效创建"""
         perf = AgentPerformance(
             agent_id="agent_001",
-            period_start=datetime.utcnow() - timedelta(days=7),
-            period_end=datetime.utcnow(),
+            period_start=utcnow() - timedelta(days=7),
+            period_end=utcnow(),
             total_sessions=50,
             resolved_sessions=45,
         )
@@ -145,12 +144,14 @@ class TestIntegration:
         mock_redis.expire = AsyncMock()
         mock_redis.lpush = AsyncMock()
         mock_redis.ltrim = AsyncMock()
-        mock_redis.hgetall = AsyncMock(return_value={
-            "status": "offline",
-            "concurrent_chats": "0",
-        })
+        mock_redis.hgetall = AsyncMock(
+            return_value={
+                "status": "offline",
+                "concurrent_chats": "0",
+            }
+        )
 
-        with patch.object(service, '_fallback_manager') as mock_fallback:
+        with patch.object(service, "_fallback_manager") as mock_fallback:
             mock_fallback.execute_with_fallback = AsyncMock(
                 return_value={"status": "offline", "concurrent_chats": 0}
             )

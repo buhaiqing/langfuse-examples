@@ -5,6 +5,7 @@ Loads alert rules from YAML configuration file and registers them with AlertMana
 Supports environment-specific overrides via environment variables.
 """
 
+import logging
 import os
 import yaml
 from pathlib import Path
@@ -16,6 +17,8 @@ from src.observability.alerting import (
     AlertChannel,
     get_alert_manager,
 )
+
+logger = logging.getLogger(__name__)
 
 
 # Channel name mapping (config file -> enum)
@@ -74,8 +77,8 @@ class AlertConfigLoader:
         path = Path(config_path) if config_path else self.config_path
         
         if not path.exists():
-            print(f"⚠️  Alert config file not found: {path}")
-            print("   No alert rules will be loaded.")
+            logger.warning("Alert config file not found: %s", path)
+            logger.info("No alert rules will be loaded.")
             return 0
         
         try:
@@ -83,7 +86,7 @@ class AlertConfigLoader:
                 config = yaml.safe_load(f)
             
             if not config or 'alerts' not in config:
-                print(f"⚠️  No 'alerts' section found in {path}")
+                logger.warning("No 'alerts' section found in %s", path)
                 return 0
             
             alerts_config = config['alerts']
@@ -96,24 +99,23 @@ class AlertConfigLoader:
                         self._manager.register_rule(rule)
                         self._loaded_rules.append(rule.name)
                         registered_count += 1
-                        print(f"✓ Registered alert rule: {rule.name}")
+                        logger.info("Registered alert rule: %s", rule.name)
                     elif rule and not rule.enabled:
-                        print(f"⊘ Skipped disabled rule: {alert_cfg.get('name', 'unknown')}")
+                        logger.info("Skipped disabled rule: %s", alert_cfg.get('name', 'unknown'))
                 except ValueError as e:
-                    # Validation errors should propagate
-                    print(f"❌ Validation error for rule '{alert_cfg.get('name', 'unknown')}': {e}")
+                    logger.error("Validation error for rule '%s': %s", alert_cfg.get('name', 'unknown'), e)
                     raise
                 except Exception as e:
-                    print(f"❌ Failed to register rule '{alert_cfg.get('name', 'unknown')}': {e}")
+                    logger.error("Failed to register rule '%s': %s", alert_cfg.get('name', 'unknown'), e)
             
-            print(f"\n✅ Loaded {registered_count} alert rule(s) from {path}")
+            logger.info("Loaded %d alert rule(s) from %s", registered_count, path)
             return registered_count
             
         except yaml.YAMLError as e:
-            print(f"❌ Failed to parse alert config file: {e}")
+            logger.error("Failed to parse alert config file: %s", e)
             raise
         except Exception as e:
-            print(f"❌ Failed to load alert config: {e}")
+            logger.error("Failed to load alert config: %s", e)
             raise
 
     def _create_rule_from_config(self, config: dict) -> Optional[AlertRule]:
@@ -187,7 +189,7 @@ class AlertConfigLoader:
             if channel_lower in CHANNEL_MAP:
                 channels.append(CHANNEL_MAP[channel_lower])
             else:
-                print(f"⚠️  Unknown channel '{channel_name}', skipping. Valid channels: {list(CHANNEL_MAP.keys())}")
+                logger.warning("Unknown channel '%s', skipping. Valid channels: %s", channel_name, list(CHANNEL_MAP.keys()))
         
         # Validate enabled
         enabled = config.get('enabled', True)

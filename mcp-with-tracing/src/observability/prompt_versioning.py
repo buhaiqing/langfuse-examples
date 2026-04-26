@@ -4,9 +4,12 @@ Prompt versioning management for MCP Langfuse Observability.
 Provides prompt version registration, tracking, and comparison.
 """
 
+import logging
 from typing import Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -66,6 +69,7 @@ class PromptVersionManager:
         if prompt_id not in self._active_versions:
             self._active_versions[prompt_id] = version
 
+        logger.info("Registered prompt version: %s@%s", prompt_id, version)
         return prompt_version
 
     def get_version(self, prompt_id: str, version: str) -> Optional[PromptVersion]:
@@ -109,6 +113,7 @@ class PromptVersionManager:
         for v in self._versions[prompt_id]:
             if v.version == version:
                 self._active_versions[prompt_id] = version
+                logger.info("Set active prompt version: %s@%s", prompt_id, version)
                 return True
 
         return False

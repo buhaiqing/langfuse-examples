@@ -1,16 +1,17 @@
 """API 客户端工具测试"""
 
-import pytest
-from unittest.mock import AsyncMock, patch, MagicMock
+from unittest.mock import AsyncMock, MagicMock, patch
+
 import httpx
+import pybreaker
+import pytest
 from utils.api_client import (
     APIClient,
-    JiraClient,
-    ZendeskClient,
     APIClientError,
     CircuitBreakerOpen,
+    JiraClient,
+    ZendeskClient,
 )
-import pybreaker
 
 
 class TestAPIClient:

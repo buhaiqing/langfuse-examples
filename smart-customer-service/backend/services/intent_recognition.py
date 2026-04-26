@@ -1,13 +1,13 @@
 """意图识别服务"""
 
 import re
-from typing import Optional, Dict, Any, List, Tuple
 from dataclasses import dataclass
-from langchain_openai import ChatOpenAI
-from langchain_core.prompts import ChatPromptTemplate
+from typing import Any
+
+from core.llm_client_pool import get_chat_client
 from langchain_core.output_parsers import JsonOutputParser
+from langchain_core.prompts import ChatPromptTemplate
 from pydantic import BaseModel, Field
-from core.config import settings
 
 
 # ==================== 数据模型 ====================
@@ -17,9 +17,9 @@ class IntentRecognitionResult:
 
     intent: str
     confidence: float
-    slots: Dict[str, Any]
-    entities: List[Dict[str, Any]]
-    raw_response: Optional[str] = None
+    slots: dict[str, Any]
+    entities: list[dict[str, Any]]
+    raw_response: str | None = None
 
 
 @dataclass
@@ -95,17 +95,23 @@ class IntentOutput(BaseModel):
     """LLM 意图识别输出"""
 
     intent: str = Field(
-        description="意图类型，必须是以下之一：api_error_troubleshooting, account_login_issue, billing_payment_question, feature_usage_guidance, ticket_status_query, product_information, technical_documentation, general_inquiry, human_agent_request"
+        description=(
+            "意图类型，必须是以下之一：api_error_troubleshooting, "
+            "account_login_issue, billing_payment_question, "
+            "feature_usage_guidance, ticket_status_query, "
+            "product_information, technical_documentation, "
+            "general_inquiry, human_agent_request"
+        )
     )
     confidence: float = Field(description="置信度，0.0 到 1.0 之间")
-    slots: Dict[str, Any] = Field(description="提取的槽位信息")
+    slots: dict[str, Any] = Field(description="提取的槽位信息")
     reasoning: str = Field(description="判断理由")
 
 
 class EntityOutput(BaseModel):
     """LLM 实体识别输出"""
 
-    entities: List[Dict[str, str]] = Field(
+    entities: list[dict[str, str]] = Field(
         description="识别的实体列表，每个实体包含 entity_type 和 value"
     )
 
@@ -115,7 +121,7 @@ class IntentRecognitionService:
     """意图识别服务"""
 
     def __init__(self):
-        self.llm = ChatOpenAI(model=settings.openai_model, temperature=0)
+        self.llm = get_chat_client(temperature=0)
 
         self.intent_prompt = ChatPromptTemplate.from_messages(
             [
@@ -173,7 +179,7 @@ class IntentRecognitionService:
         return text
 
     async def recognize(
-        self, user_message: str, context: Optional[Dict] = None
+        self, user_message: str, context: dict | None = None
     ) -> IntentRecognitionResult:
         """
         意图识别主方法
@@ -196,7 +202,7 @@ class IntentRecognitionService:
             raw_response=str(intent_result),
         )
 
-    def _format_context(self, context: Optional[Dict]) -> str:
+    def _format_context(self, context: dict | None) -> str:
         if not context:
             return "无上下文信息"
 
@@ -230,7 +236,7 @@ class IntentRecognitionService:
             reasoning=result.get("reasoning", ""),
         )
 
-    async def _recognize_entities(self, message: str) -> List[Dict[str, str]]:
+    async def _recognize_entities(self, message: str) -> list[dict[str, str]]:
         prompt = await self.entity_prompt.ainvoke({"user_message": message})
 
         response = await self.llm.ainvoke(prompt)
@@ -238,7 +244,7 @@ class IntentRecognitionService:
 
         return result.get("entities", [])
 
-    async def extract_slots(self, user_message: str, intent: str) -> Dict[str, Any]:
+    async def extract_slots(self, user_message: str, intent: str) -> dict[str, Any]:
         """
         提取槽位
         """
@@ -260,7 +266,7 @@ class IntentRecognitionService:
 
         return slots
 
-    async def recognize_entities(self, user_message: str) -> List[Entity]:
+    async def recognize_entities(self, user_message: str) -> list[Entity]:
         """
         实体识别
         """

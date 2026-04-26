@@ -1,41 +1,57 @@
 """
-Langfuse client wrapper for real trace tracking.
+Langfuse client wrapper for trace tracking.
+
+Uses the shared Langfuse client from instrumentation module
+instead of creating a separate instance.
 """
 
+import logging
 from typing import Any, Optional
 from contextlib import contextmanager
 from datetime import datetime, timezone
 
-from langfuse import Langfuse, propagate_attributes, Langfuse
-from src.observability.config import ObservabilityConfig
-from src.observability.session import SessionManager
-from src.observability.prompt_versioning import get_prompt_version_manager
-from src.observability.feedback import (
-    FeedbackType,
-    record_acceptance as _record_acceptance,
-    record_rejection as _record_rejection,
-    record_rating as _record_rating,
-    record_comment as _record_comment,
-)
 from langfuse import Langfuse
+from src.observability.config import ObservabilityConfig
+from src.observability.instrumentation import get_langfuse_client
+from src.observability.session import SessionManager
+from src.observability.feedback import FeedbackType
+
+logger = logging.getLogger(__name__)
 
 
 class LangfuseObserver:
-    """Langfuse observer for tracking MCP tool executions."""
+    """Langfuse observer for tracking MCP tool executions.
+
+    Uses the shared Langfuse client obtained from get_langfuse_client()
+    to ensure all modules use the same client instance.
+    """
 
     def __init__(self, config: Optional[ObservabilityConfig] = None):
-        self.config = config or ObservabilityConfig()
-        self.client: Optional[Langfuse] = None
+        self.config: Optional[ObservabilityConfig] = config
+        self._own_client: Optional[Langfuse] = None
 
-        if self.config.enabled and self.config.is_configured():
-            self.client = Langfuse(
-                public_key=self.config.langfuse_public_key,
-                secret_key=self.config.langfuse_secret_key,
-                host=self.config.langfuse_host,
+        if config is not None and config.enabled and config.is_configured():
+            self._own_client = Langfuse(
+                public_key=config.langfuse_public_key,
+                secret_key=config.langfuse_secret_key,
+                host=config.langfuse_host,
             )
-            print(f"Langfuse initialized (host={self.config.langfuse_host})")
-        else:
-            print("Langfuse disabled or not configured")
+            logger.info("LangfuseObserver initialized with dedicated client (host=%s)", config.langfuse_host)
+
+    @property
+    def client(self) -> Optional[Langfuse]:
+        """Get the Langfuse client.
+
+        Priority:
+        1. Own client (if created with explicit config)
+        2. Shared global client from instrumentation module
+
+        Returns:
+            Langfuse client instance or None if not available.
+        """
+        if self._own_client is not None:
+            return self._own_client
+        return get_langfuse_client()
 
     @contextmanager
     def trace_tool_call(
@@ -48,62 +64,80 @@ class LangfuseObserver:
         prompt_id: Optional[str] = None,
     ):
         """Context manager for tracing a tool call.
-        
+
+        Creates a real Langfuse trace with a span observation,
+        properly recording input, output, and errors.
+
         Args:
-            tool_name: Name of the tool being called
-            input_args: Input arguments to the tool
-            session_id: Optional session ID
-            user_id: Optional user ID
-            prompt_version: Optional prompt version
-            prompt_id: Optional prompt ID (will be stored in metadata)
+            tool_name: Name of the tool being called.
+            input_args: Input arguments to the tool.
+            session_id: Optional session ID.
+            user_id: Optional user ID.
+            prompt_version: Optional prompt version.
+            prompt_id: Optional prompt ID (stored in metadata).
         """
-        if not self.client:
+        client = self.client
+        if not client:
             yield None
             return
 
         if session_id:
             SessionManager.set_session(session_id, user_id)
 
-        # Prepare metadata with version info
+        ctx = SessionManager.get_session()
+        effective_session_id = ctx.get("session_id") or session_id
+        effective_user_id = ctx.get("user_id") or user_id
+
         metadata = {
             "tool_name": tool_name,
             "prompt_version": prompt_version,
             "timestamp": datetime.now(timezone.utc).isoformat(),
         }
-        
+
         if prompt_id:
             metadata["prompt_id"] = prompt_id
 
-        with SessionManager.propagate_session_ctx():
-            with self.client.start_as_current_observation(
+        trace_kwargs = {
+            "name": tool_name,
+            "input": input_args,
+            "metadata": metadata,
+            "version": prompt_version,
+        }
+        if effective_session_id:
+            trace_kwargs["session_id"] = effective_session_id
+        if effective_user_id:
+            trace_kwargs["user_id"] = effective_user_id
+
+        with client.trace(**trace_kwargs) as trace:
+            with trace.span(
                 name=tool_name,
-                as_type="tool",
                 input=input_args,
-                metadata=metadata,
                 version=prompt_version,
-            ) as observation:
+            ) as span:
                 try:
-                    yield observation
+                    yield span
                 except Exception as e:
-                    observation.update(
+                    span.update(
                         level="ERROR",
                         status_message=str(e),
                     )
                     raise
                 else:
-                    observation.update(
+                    span.update(
                         metadata={"status": "success"},
                     )
 
     def flush(self) -> None:
         """Flush all pending traces to Langfuse."""
-        if self.client:
-            self.client.flush()
+        client = self.client
+        if client:
+            client.flush()
 
     def shutdown(self) -> None:
         """Shutdown the Langfuse client."""
-        if self.client:
-            self.client.shutdown()
+        client = self.client
+        if client:
+            client.shutdown()
 
     def score_trace(
         self,
@@ -113,8 +147,7 @@ class LangfuseObserver:
         comment: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
     ) -> None:
-        """
-        Score a trace with feedback.
+        """Score a trace with feedback.
 
         Args:
             trace_id: The trace ID to score.
@@ -123,19 +156,24 @@ class LangfuseObserver:
             comment: Optional comment.
             metadata: Optional additional metadata.
         """
-        if not self.client:
+        client = self.client
+        if not client:
             return
 
         try:
-            self.client.score(
-                trace_id=trace_id,
-                name=name,
-                value=value,
-                comment=comment,
-                metadata=metadata or {},
-            )
+            score_kwargs = {
+                "trace_id": trace_id,
+                "name": name,
+                "value": value,
+            }
+            if comment:
+                score_kwargs["comment"] = comment
+            if metadata:
+                score_kwargs["metadata"] = metadata
+
+            client.score(**score_kwargs)
         except Exception as e:
-            print(f"Failed to score trace {trace_id}: {e}")
+            logger.error("Failed to score trace %s: %s", trace_id, e)
 
     def record_feedback_to_langfuse(
         self,
@@ -146,8 +184,7 @@ class LangfuseObserver:
         comment: Optional[str] = None,
         metadata: Optional[dict[str, Any]] = None,
     ) -> None:
-        """
-        Record feedback to Langfuse as a score.
+        """Record feedback to Langfuse as a score.
 
         Args:
             trace_id: Trace ID to attach feedback to.
@@ -157,10 +194,10 @@ class LangfuseObserver:
             comment: Optional comment.
             metadata: Optional additional metadata.
         """
-        if not self.client:
+        client = self.client
+        if not client:
             return
 
-        # Map feedback type to score name and value
         if feedback_type == FeedbackType.ACCEPT:
             score_name = "user-feedback"
             score_value = 1.0
@@ -171,13 +208,11 @@ class LangfuseObserver:
             score_name = "user-satisfaction"
             score_value = float(value)
         elif feedback_type == FeedbackType.COMMENT:
-            # Comments don't have numeric scores, use metadata only
             score_name = "user-comment"
-            score_value = 1.0  # Placeholder
+            score_value = 1.0
         else:
             return
 
-        # Prepare metadata
         fb_metadata = {
             "feedback_type": feedback_type.value,
             **(metadata or {}),
@@ -198,15 +233,28 @@ _observer: Optional[LangfuseObserver] = None
 
 
 def get_observer() -> LangfuseObserver:
-    """Get the global observer instance."""
+    """Get the global observer instance.
+
+    The observer uses the shared Langfuse client from get_langfuse_client().
+    """
     global _observer
     if _observer is None:
         _observer = LangfuseObserver()
     return _observer
 
 
-def init_observer(config: ObservabilityConfig = None) -> LangfuseObserver:
-    """Initialize the global observer."""
+def init_observer(config: Optional[ObservabilityConfig] = None) -> LangfuseObserver:
+    """Initialize the global observer with an optional config.
+
+    If config is provided and valid, the observer will use a dedicated
+    Langfuse client. Otherwise, it falls back to the shared global client.
+
+    Args:
+        config: Optional ObservabilityConfig for dedicated client.
+
+    Returns:
+        The initialized LangfuseObserver instance.
+    """
     global _observer
     _observer = LangfuseObserver(config)
     return _observer

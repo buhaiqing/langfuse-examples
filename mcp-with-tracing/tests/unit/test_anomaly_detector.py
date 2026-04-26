@@ -282,7 +282,6 @@ class TestMetricsCollector:
         """Provide a mocked Langfuse client."""
         mock_client = Mock()
         
-        # Mock trace list response
         mock_trace = Mock()
         mock_trace.status = 'SUCCESS'
         mock_trace.duration = 150.0
@@ -290,17 +289,7 @@ class TestMetricsCollector:
         mock_response = Mock()
         mock_response.data = [mock_trace] * 10
         
-        mock_client.client.trace.list.return_value = mock_response
-        
-        # Mock score list response
-        mock_score = Mock()
-        mock_score.name = 'user_satisfaction'
-        mock_score.value = 4.5
-        
-        mock_score_response = Mock()
-        mock_score_response.data = [mock_score]
-        
-        mock_client.client.score.list.return_value = mock_score_response
+        mock_client.get_traces.return_value = mock_response
         
         return mock_client
 
@@ -334,7 +323,12 @@ class TestMetricsCollector:
     def test_collect_avg_satisfaction(self, mock_langfuse_client):
         """Test average satisfaction calculation."""
         with patch('src.observability.metrics_collector.get_langfuse_client',
-                   return_value=mock_langfuse_client):
+                   return_value=mock_langfuse_client), \
+             patch('src.observability.feedback.get_feedback_collector') as mock_get_fc:
+            mock_collector = Mock()
+            mock_collector.get_average_rating.return_value = 4.5
+            mock_get_fc.return_value = mock_collector
+            
             collector = MetricsCollector(window_minutes=10)
             satisfaction = collector.collect_avg_satisfaction()
             

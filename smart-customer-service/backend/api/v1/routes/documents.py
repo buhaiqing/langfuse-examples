@@ -1,36 +1,35 @@
 """文档管理 API 路由"""
 
-from fastapi import APIRouter, UploadFile, File, Form
-from typing import List, Optional
-import tempfile
-import os
-import re
 import hashlib
 import logging
+import os
+import re
+import tempfile
 
-from services.rag_service import rag_service
-from core.langfuse_client import create_span
 from core.exceptions import (
-    ValidationException,
     DocumentNotFoundException,
-    RAGQueryFailed,
     ErrorCode,
+    RAGQueryFailed,
+    ValidationException,
 )
+from core.langfuse_client import create_span
+from fastapi import APIRouter, File, Form, UploadFile
+from services.rag_service import rag_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/documents", tags=["文档管理"])
 
 # 允许的文件扩展名白名单
-ALLOWED_EXTENSIONS = {'.pdf', '.docx', '.md', '.txt', '.html', '.htm'}
+ALLOWED_EXTENSIONS = {".pdf", ".docx", ".md", ".txt", ".html", ".htm"}
 
 # 允许的文件 MIME 类型（用于额外验证）
 ALLOWED_MIME_TYPES = {
-    'application/pdf',
-    'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
-    'text/markdown',
-    'text/plain',
-    'text/html',
+    "application/pdf",
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    "text/markdown",
+    "text/plain",
+    "text/html",
 }
 
 # 最大文件大小 (10MB)
@@ -55,7 +54,7 @@ def _validate_filename(filename: str) -> str:
 
     # 移除路径分隔符和特殊字符
     filename = os.path.basename(filename)
-    filename = re.sub(r'[^\w\-.]', '_', filename)
+    filename = re.sub(r"[^\w\-.]", "_", filename)
 
     # 检查文件名长度
     if len(filename) > 255:
@@ -116,19 +115,19 @@ def _validate_file_content(filename: str, content: bytes) -> None:
     ext = os.path.splitext(filename)[1].lower()
 
     # PDF 魔数检查
-    if ext == '.pdf':
-        if not content.startswith(b'%PDF'):
+    if ext == ".pdf":
+        if not content.startswith(b"%PDF"):
             raise ValidationException(message="无效的 PDF 文件")
 
     # DOCX 魔数检查 (ZIP 格式)
-    elif ext == '.docx':
-        if not content.startswith(b'PK\x03\x04'):
+    elif ext == ".docx":
+        if not content.startswith(b"PK\x03\x04"):
             raise ValidationException(message="无效的 DOCX 文件")
 
     # HTML 标签检查
-    elif ext in ('.html', '.htm'):
-        content_str = content[:1024].decode('utf-8', errors='ignore').lower()
-        if '<script' in content_str or '<iframe' in content_str:
+    elif ext in (".html", ".htm"):
+        content_str = content[:1024].decode("utf-8", errors="ignore").lower()
+        if "<script" in content_str or "<iframe" in content_str:
             raise ValidationException(message="HTML 文件包含不安全的内容")
 
 
@@ -151,8 +150,8 @@ def _generate_safe_filename(original_filename: str) -> str:
 
 @router.post("/upload")
 async def upload_documents(
-    files: List[UploadFile] = File(..., description="要上传的文件列表"),
-    metadata: Optional[str] = Form(None, description="文档元数据（JSON格式）"),
+    files: list[UploadFile] = File(..., description="要上传的文件列表"),  # noqa: B008
+    metadata: str | None = Form(None, description="文档元数据（JSON格式）"),
 ):
     """
     上传文档到知识库
@@ -207,10 +206,12 @@ async def upload_documents(
 
                 except ValidationException as e:
                     results["failed_files"] += 1
-                    results["errors"].append({
-                        "filename": file.filename,
-                        "error": e.message,
-                    })
+                    results["errors"].append(
+                        {
+                            "filename": file.filename,
+                            "error": e.message,
+                        }
+                    )
                     logger.warning(f"文件上传失败 {file.filename}: {e.message}")
 
             # 导入文档到 RAG
@@ -232,7 +233,7 @@ async def upload_documents(
                     raise RAGQueryFailed(
                         message=f"文档导入失败：{str(e)}",
                         code=ErrorCode.RAG_QUERY_FAILED,
-                    )
+                    ) from e
             else:
                 raise ValidationException(message="没有有效的文件可以导入")
 
@@ -255,7 +256,7 @@ async def delete_document(doc_id: str):
         ValidationException: 文档 ID 无效
         DocumentNotFoundException: 文档不存在
     """
-    if not doc_id or not re.match(r'^[\w\-]+$', doc_id):
+    if not doc_id or not re.match(r"^[\w\-]+$", doc_id):
         raise ValidationException(message="无效的文档 ID")
 
     try:
@@ -263,8 +264,8 @@ async def delete_document(doc_id: str):
         return {"success": True, "message": f"文档 {doc_id} 已删除"}
     except Exception as e:
         if "not found" in str(e).lower():
-            raise DocumentNotFoundException(doc_id=doc_id)
-        raise RAGQueryFailed(message=f"删除文档失败：{str(e)}")
+            raise DocumentNotFoundException(doc_id=doc_id) from e
+        raise RAGQueryFailed(message=f"删除文档失败：{str(e)}") from e
 
 
 @router.get("/stats")

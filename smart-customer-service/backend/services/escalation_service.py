@@ -1,12 +1,12 @@
 """升级管理服务模块"""
 
-from typing import Dict, Any, List, Optional
 from dataclasses import dataclass, field
-from datetime import datetime
-from langchain_openai import ChatOpenAI
+from typing import Any
+
+from core.llm_client_pool import get_chat_client
 from langchain_core.prompts import ChatPromptTemplate
-from core.config import settings
 from storage.redis_client import redis_client
+from utils import utcnow
 
 
 @dataclass
@@ -17,16 +17,16 @@ class EscalationRequest:
     user_id: str
     priority_score: float
     priority_level: str  # critical/high/medium/low
-    trigger_reasons: List[str]
-    context: Dict[str, Any] = field(default_factory=dict)
-    created_at: str = field(default_factory=lambda: datetime.utcnow().isoformat())
+    trigger_reasons: list[str]
+    context: dict[str, Any] = field(default_factory=dict)
+    created_at: str = field(default_factory=lambda: utcnow().isoformat())
 
 
 class EscalationService:
     """升级管理服务"""
 
     def __init__(self):
-        self.llm = ChatOpenAI(model=settings.openai_model, temperature=0.1)
+        self.llm = get_chat_client(temperature=0.1)
 
         # 情绪分析提示词
         self.sentiment_prompt = ChatPromptTemplate.from_messages(
@@ -104,7 +104,7 @@ class EscalationService:
         needs_escalation = priority_score >= 40
 
         if needs_escalation:
-            escalation = EscalationRequest(
+            EscalationRequest(
                 session_id=session_id,
                 user_id=user_id,
                 priority_score=priority_score,
@@ -140,7 +140,7 @@ class EscalationService:
                 score=float(data.get("score", 0)),
                 reasoning=data.get("reasoning", ""),
             )
-        except:
+        except (ValueError, KeyError, TypeError):
             return SentimentResult(score=0, reasoning="无法解析")
 
     def _calculate_priority_level(self, score: float) -> str:

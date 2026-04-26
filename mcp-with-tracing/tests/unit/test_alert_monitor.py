@@ -6,6 +6,7 @@ and scheduler lifecycle management.
 """
 
 import pytest
+import logging
 import asyncio
 from unittest.mock import Mock, MagicMock, patch, AsyncMock
 from datetime import datetime, timezone
@@ -70,7 +71,7 @@ class TestAlertMonitorScheduler:
         mock_scheduler.shutdown.assert_called_once_with(wait=True)
 
     @pytest.mark.asyncio
-    async def test_check_all_rules_no_rules(self, capsys):
+    async def test_check_all_rules_no_rules(self, caplog):
         """Test checking when no rules are registered."""
         with patch('src.observability.alert_monitor.get_alert_manager') as mock_get_mgr:
             mock_manager = MagicMock()
@@ -78,13 +79,13 @@ class TestAlertMonitorScheduler:
             mock_get_mgr.return_value = mock_manager
             
             scheduler = AlertMonitorScheduler()
-            await scheduler._check_all_rules()
+            with caplog.at_level(logging.WARNING, logger="src.observability.alert_monitor"):
+                await scheduler._check_all_rules()
             
-            captured = capsys.readouterr()
-            assert "No alert rules registered" in captured.out
+            assert "No alert rules registered" in caplog.text
 
     @pytest.mark.asyncio
-    async def test_check_all_rules_disabled_rule(self, capsys):
+    async def test_check_all_rules_disabled_rule(self, caplog):
         """Test checking with disabled rule."""
         with patch('src.observability.alert_monitor.get_alert_manager') as mock_get_mgr:
             mock_manager = MagicMock()
@@ -103,11 +104,10 @@ class TestAlertMonitorScheduler:
             mock_get_mgr.return_value = mock_manager
             
             scheduler = AlertMonitorScheduler()
-            await scheduler._check_all_rules()
+            with caplog.at_level(logging.WARNING, logger="src.observability.alert_monitor"):
+                await scheduler._check_all_rules()
             
-            # Should skip disabled rules
-            captured = capsys.readouterr()
-            assert 'TRIGGERED' not in captured.out
+            assert 'TRIGGERED' not in caplog.text
 
     @pytest.mark.asyncio
     async def test_check_all_rules_triggers_alert(self):
@@ -220,7 +220,7 @@ class TestAlertMonitorScheduler:
             assert abs(value - 0.05) < 0.0001
 
     @pytest.mark.asyncio
-    async def test_get_metric_value_unknown_metric(self, capsys):
+    async def test_get_metric_value_unknown_metric(self, caplog):
         """Test getting unknown metric returns None."""
         scheduler = AlertMonitorScheduler()
         
@@ -232,11 +232,11 @@ class TestAlertMonitorScheduler:
             severity=AlertSeverity.WARNING,
         )
         
-        value = await scheduler._get_metric_value(rule)
+        with caplog.at_level(logging.WARNING, logger="src.observability.alert_monitor"):
+            value = await scheduler._get_metric_value(rule)
         
         assert value is None
-        captured = capsys.readouterr()
-        assert "Unknown metric" in captured.out
+        assert "Unknown metric" in caplog.text
 
     def test_get_status_not_running(self):
         """Test status when scheduler is not running."""

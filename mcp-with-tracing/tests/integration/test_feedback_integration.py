@@ -181,29 +181,27 @@ class TestFeedbackLangfuseIntegration:
 
     def test_score_trace_without_client(self):
         """Test scoring when Langfuse client is not initialized."""
-        observer = LangfuseObserver()
-        observer.client = None
+        with patch("src.observability.langfuse_client.get_langfuse_client", return_value=None):
+            observer = LangfuseObserver()
 
-        # Should not raise exception
-        observer.score_trace(
-            trace_id="trace-123",
-            name="test-score",
-            value=1,
-        )
+            observer.score_trace(
+                trace_id="trace-123",
+                name="test-score",
+                value=1,
+            )
 
     @pytest.mark.integration
 
     def test_record_feedback_without_client(self):
         """Test recording feedback when Langfuse client is not initialized."""
-        observer = LangfuseObserver()
-        observer.client = None
+        with patch("src.observability.langfuse_client.get_langfuse_client", return_value=None):
+            observer = LangfuseObserver()
 
-        # Should not raise exception
-        observer.record_feedback_to_langfuse(
-            trace_id="trace-123",
-            feedback_type=FeedbackType.ACCEPT,
-            value=1,
-        )
+            observer.record_feedback_to_langfuse(
+                trace_id="trace-123",
+                feedback_type=FeedbackType.ACCEPT,
+                value=1,
+            )
 
     @patch("src.observability.langfuse_client.Langfuse")
     @pytest.mark.integration

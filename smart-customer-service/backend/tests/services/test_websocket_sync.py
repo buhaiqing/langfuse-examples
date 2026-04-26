@@ -7,18 +7,13 @@ WebSocket Redis 同步测试
 - 客服状态广播
 """
 
-import pytest
-import asyncio
-import json
-from unittest.mock import AsyncMock, MagicMock, patch
-from datetime import datetime
+from unittest.mock import AsyncMock, MagicMock
 
 from services.websocket_sync import (
-    WSMessageType,
     PubSubMessage,
     RedisPubSubManager,
     WebSocketSyncService,
-    get_ws_sync_service,
+    WSMessageType,
 )
 
 

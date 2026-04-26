@@ -9,10 +9,12 @@
 - 实时监控指标
 """
 
-from typing import Dict, List, Any, Optional
-from datetime import datetime, timedelta
-from dataclasses import dataclass
 import logging
+from dataclasses import dataclass
+from datetime import timedelta
+from typing import Any
+
+from utils import utcnow
 
 logger = logging.getLogger(__name__)
 
@@ -37,10 +39,10 @@ class AnalyticsService:
     """数据分析服务"""
 
     def __init__(self):
-        self.metrics_cache: Dict[str, Any] = {}
+        self.metrics_cache: dict[str, Any] = {}
         self.cache_ttl_seconds = 300  # 5 分钟
 
-    async def get_overview(self, days: int = 7) -> Dict[str, Any]:
+    async def get_overview(self, days: int = 7) -> dict[str, Any]:
         """
         获取概览统计
 
@@ -50,7 +52,7 @@ class AnalyticsService:
         Returns:
             概览数据
         """
-        end_date = datetime.utcnow()
+        end_date = utcnow()
         start_date = end_date - timedelta(days=days)
 
         # TODO: 从数据库/Redis 查询实际数据
@@ -76,7 +78,7 @@ class AnalyticsService:
             },
         }
 
-    async def get_intent_distribution(self, days: int = 7) -> Dict[str, Any]:
+    async def get_intent_distribution(self, days: int = 7) -> dict[str, Any]:
         """
         获取意图分布统计
 
@@ -104,8 +106,8 @@ class AnalyticsService:
         }
 
     async def get_agent_performance(
-        self, agent_id: Optional[str] = None, days: int = 7
-    ) -> Dict[str, Any]:
+        self, agent_id: str | None = None, days: int = 7
+    ) -> dict[str, Any]:
         """
         获取客服绩效统计
 
@@ -164,7 +166,7 @@ class AnalyticsService:
                 },
             }
 
-    async def get_realtime_metrics(self) -> Dict[str, Any]:
+    async def get_realtime_metrics(self) -> dict[str, Any]:
         """
         获取实时监控指标
 
@@ -173,7 +175,7 @@ class AnalyticsService:
         """
         # TODO: 从 Redis 获取实时数据
         return {
-            "timestamp": datetime.utcnow().isoformat(),
+            "timestamp": utcnow().isoformat(),
             "sessions": {"active": 45, "waiting": 3, "agents_online": 12, "agents_busy": 5},
             "performance": {
                 "avg_wait_time_seconds": 15.5,
@@ -188,7 +190,7 @@ class AnalyticsService:
             },
         }
 
-    async def get_trend_analysis(self, metric: str, days: int = 30) -> Dict[str, Any]:
+    async def get_trend_analysis(self, metric: str, days: int = 30) -> dict[str, Any]:
         """
         获取趋势分析
 
@@ -202,7 +204,7 @@ class AnalyticsService:
         # 生成示例趋势数据
         trend_data = []
         for i in range(days):
-            date = datetime.utcnow() - timedelta(days=days - i)
+            date = utcnow() - timedelta(days=days - i)
             trend_data.append(
                 {
                     "date": date.strftime("%Y-%m-%d"),
@@ -246,7 +248,7 @@ class AnalyticsService:
         return {
             "report_type": report_type,
             "format": format,
-            "generated_at": datetime.utcnow().isoformat(),
+            "generated_at": utcnow().isoformat(),
             "data": data,
         }
 

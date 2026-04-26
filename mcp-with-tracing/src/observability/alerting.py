@@ -4,11 +4,14 @@ Alerting and notification management for MCP Langfuse Observability.
 Provides alert rule configuration, threshold monitoring, and notification channels.
 """
 
+import logging
 from typing import Any, Optional, Callable
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
 import json
+
+logger = logging.getLogger(__name__)
 
 
 class AlertSeverity(Enum):
@@ -138,7 +141,7 @@ class AlertManager:
                 try:
                     handler(alert)
                 except Exception as e:
-                    print(f"Failed to send {channel.value} notification: {e}")
+                    logger.error("Failed to send %s notification: %s", channel.value, e)
 
     def get_triggered_alerts(self, rule_name: Optional[str] = None) -> list[Alert]:
         """Get previously triggered alerts."""

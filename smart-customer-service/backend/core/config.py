@@ -4,12 +4,11 @@
 从环境变量加载配置，使用 Pydantic 进行验证
 """
 
-from functools import lru_cache
-from typing import Optional, List, Any
-import secrets
 import os
+from functools import lru_cache
+from typing import Any
 
-from pydantic import Field, field_validator, ValidationError
+from pydantic import Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -38,7 +37,7 @@ class Settings(BaseSettings):
 
     # ==================== OpenAI 配置 ====================
     openai_api_key: str = Field(default="", description="OpenAI API Key")
-    openai_base_url: Optional[str] = Field(default=None, description="OpenAI Base URL")
+    openai_base_url: str | None = Field(default=None, description="OpenAI Base URL")
     openai_model: str = Field(default="gpt-3.5-turbo", description="OpenAI 模型")
     openai_embedding_model: str = Field(
         default="text-embedding-3-small", description="OpenAI 嵌入模型"
@@ -48,9 +47,9 @@ class Settings(BaseSettings):
     redis_host: str = Field(default="localhost", description="Redis 主机")
     redis_port: int = Field(default=6379, description="Redis 端口")
     redis_db: int = Field(default=0, description="Redis 数据库")
-    redis_password: Optional[str] = Field(default=None, description="Redis 密码")
+    redis_password: str | None = Field(default=None, description="Redis 密码")
     redis_ttl_hours: int = Field(default=24, description="会话 TTL(小时)")
-    redis_url: Optional[str] = Field(default=None, description="Redis URL(优先级高于单独配置)")
+    redis_url: str | None = Field(default=None, description="Redis URL(优先级高于单独配置)")
 
     # Redis 连接池配置
     redis_max_connections: int = Field(default=100, description="Redis 最大连接数")
@@ -64,7 +63,7 @@ class Settings(BaseSettings):
     fallback_strategy: str = Field(
         default="cache", description="降级策略 (cache/default_value/empty)"
     )
-    fallback_default_value: Optional[Any] = Field(default=None, description="降级默认值")
+    fallback_default_value: Any | None = Field(default=None, description="降级默认值")
     fallback_cache_ttl: int = Field(default=300, description="降级缓存 TTL(秒)")
 
     # 熔断器配置
@@ -78,7 +77,7 @@ class Settings(BaseSettings):
 
     @field_validator("redis_url", mode="before")
     @classmethod
-    def build_redis_url(cls, v: Optional[str], info) -> Optional[str]:
+    def build_redis_url(cls, v: str | None, info) -> str | None:
         """如果未提供 redis_url，则从其他字段构建"""
         if v:
             return v
@@ -98,13 +97,11 @@ class Settings(BaseSettings):
     postgres_db: str = Field(default="smart_cs", description="PostgreSQL 数据库")
     postgres_user: str = Field(default="postgres", description="PostgreSQL 用户")
     postgres_password: str = Field(default="postgres", description="PostgreSQL 密码")
-    postgres_url: Optional[str] = Field(
-        default=None, description="PostgreSQL URL(优先级高于单独配置)"
-    )
+    postgres_url: str | None = Field(default=None, description="PostgreSQL URL(优先级高于单独配置)")
 
     @field_validator("postgres_url", mode="before")
     @classmethod
-    def build_postgres_url(cls, v: Optional[str], info) -> str:
+    def build_postgres_url(cls, v: str | None, info) -> str:
         """如果未提供 postgres_url，则从其他字段构建"""
         if v:
             return v
@@ -120,7 +117,7 @@ class Settings(BaseSettings):
     chroma_persist_directory: str = Field(
         default="./data/chroma", description="ChromaDB 持久化目录"
     )
-    chroma_url: Optional[str] = Field(default=None, description="ChromaDB URL(优先级高于单独配置)")
+    chroma_url: str | None = Field(default=None, description="ChromaDB URL(优先级高于单独配置)")
 
     # ==================== MinIO 配置 ====================
     minio_endpoint: str = Field(default="localhost:9000", description="MinIO 端点")
@@ -132,7 +129,7 @@ class Settings(BaseSettings):
     # ==================== JWT 配置 ====================
     jwt_secret_key: str = Field(
         default_factory=lambda: os.getenv("JWT_SECRET_KEY", ""),
-        description="JWT 密钥（至少32字符，必须从环境变量设置）"
+        description="JWT 密钥（至少32字符，必须从环境变量设置）",
     )
     jwt_algorithm: str = Field(default="HS256", description="JWT 算法")
     jwt_access_token_expire_minutes: int = Field(
@@ -150,18 +147,16 @@ class Settings(BaseSettings):
                 "请生成一个安全的密钥，例如: openssl rand -hex 32"
             )
         if len(v) < 32:
-            raise ValueError(
-                f"JWT_SECRET_KEY 必须至少32字符，当前长度: {len(v)}"
-            )
+            raise ValueError(f"JWT_SECRET_KEY 必须至少32字符，当前长度: {len(v)}")
         return v
 
     # ==================== CORS 配置 ====================
-    cors_origins: List[str] = Field(
+    cors_origins: list[str] = Field(
         default=["http://localhost:3000", "http://localhost:8000"], description="CORS 允许的来源"
     )
     cors_allow_credentials: bool = Field(default=True, description="CORS 是否允许凭证")
-    cors_allow_methods: List[str] = Field(default=["*"], description="CORS 允许的方法")
-    cors_allow_headers: List[str] = Field(default=["*"], description="CORS 允许的头部")
+    cors_allow_methods: list[str] = Field(default=["*"], description="CORS 允许的方法")
+    cors_allow_headers: list[str] = Field(default=["*"], description="CORS 允许的头部")
 
     # ==================== 限流配置 ====================
     rate_limit_requests: int = Field(default=100, description="限流请求数")
@@ -175,26 +170,18 @@ class Settings(BaseSettings):
 
     # ==================== 认证配置 ====================
     api_key_header: str = Field(default="X-API-Key", description="API Key 头部名称")
-    service_api_keys: str = Field(
-        default_factory=lambda: os.getenv("SERVICE_API_KEYS", ""),
-        description="服务间调用的 API Keys（逗号分隔，必须从环境变量设置）"
+    service_api_keys_str: str = Field(
+        default="",
+        alias="SERVICE_API_KEYS",
+        description="服务间调用的 API Keys（逗号分隔字符串）",
     )
 
-    @field_validator("service_api_keys")
-    @classmethod
-    def validate_service_api_keys(cls, v: str) -> List[str]:
-        """验证并解析 API Keys"""
-        if not v:
-            raise ValueError(
-                "SERVICE_API_KEYS 必须在环境变量中设置。"
-                "格式: sk-key1,sk-key2,sk-key3 (逗号分隔)"
-            )
-        keys = [key.strip() for key in v.split(",") if key.strip()]
-        if not keys:
-            raise ValueError("SERVICE_API_KEYS 不能为空")
-        for key in keys:
-            if len(key) < 16:
-                raise ValueError(f"API Key 必须至少16字符: {key[:4]}...")
+    @property
+    def service_api_keys(self) -> list[str]:
+        """解析后的 API Keys 列表"""
+        if not self.service_api_keys_str:
+            return []
+        keys = [key.strip() for key in self.service_api_keys_str.split(",") if key.strip()]
         return keys
 
     @property

@@ -1,16 +1,14 @@
 """查询重写模块 - 同义词扩展、拼写纠错"""
 
-from typing import List, Dict
-from langchain_openai import ChatOpenAI
+from core.llm_client_pool import get_chat_client
 from langchain_core.prompts import ChatPromptTemplate
-from core.config import settings
 
 
 class QueryRewriter:
     """查询重写器"""
 
     def __init__(self):
-        self.llm = ChatOpenAI(model=settings.openai_model, temperature=0.1)
+        self.llm = get_chat_client(temperature=0.1)
 
         # 同义词扩展提示词
         self.synonym_prompt = ChatPromptTemplate.from_messages(
@@ -26,13 +24,14 @@ class QueryRewriter:
 
 示例：
 用户查询：API 403 错误
-输出：{"original": "API 403 错误", "expanded": ["API 权限错误", "403 Forbidden", "API 访问被拒绝", "身份验证失败"]}""",
+输出：{"original": "API 403 错误", "expanded": """
+                    """["API 权限错误", "403 Forbidden", "API 访问被拒绝", "身份验证失败"]}""",
                 ),
                 ("user", "用户查询：{query}"),
             ]
         )
 
-    async def rewrite(self, query: str) -> Dict:
+    async def rewrite(self, query: str) -> dict:
         """
         重写查询
 
@@ -45,7 +44,7 @@ class QueryRewriter:
         response = await self.llm.ainvoke(await self.synonym_prompt.ainvoke({"query": query}))
 
         # 解析响应（简化处理，实际应该用 JSON 解析器）
-        content = response.content if hasattr(response, "content") else str(response)
+        response.content if hasattr(response, "content") else str(response)
 
         return {
             "original": query,
@@ -53,7 +52,7 @@ class QueryRewriter:
             "rewritten": query,
         }
 
-    def _extract_keywords(self, query: str) -> List[str]:
+    def _extract_keywords(self, query: str) -> list[str]:
         """提取关键词"""
         # 简单的空格分词，实际应该用更高级的分词器
         return query.split()

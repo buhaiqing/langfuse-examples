@@ -1,16 +1,16 @@
 """API 客户端封装 - HTTP 请求、重试、熔断"""
 
-from typing import Dict, Any, Optional, Callable
+from typing import Any
+
 import httpx
 import pybreaker
-from tenacity import retry, stop_after_attempt, wait_exponential, retry_if_exception_type
-from core.config import settings
+from tenacity import retry, retry_if_exception_type, stop_after_attempt, wait_exponential
 
 
 class APIClientError(Exception):
     """API 客户端异常"""
 
-    def __init__(self, message: str, status_code: Optional[int] = None):
+    def __init__(self, message: str, status_code: int | None = None):
         self.message = message
         self.status_code = status_code
         super().__init__(self.message)
@@ -44,7 +44,7 @@ class APIClient:
             fail_max=5, reset_timeout=30, exclude=[httpx.HTTPStatusError]
         )
 
-        self._client: Optional[httpx.AsyncClient] = None
+        self._client: httpx.AsyncClient | None = None
 
     @property
     def client(self) -> httpx.AsyncClient:
@@ -84,12 +84,12 @@ class APIClient:
         self,
         method: str,
         url: str,
-        headers: Optional[Dict[str, str]] = None,
-        params: Optional[Dict[str, Any]] = None,
-        json: Optional[Dict[str, Any]] = None,
-        data: Optional[Dict[str, Any]] = None,
+        headers: dict[str, str] | None = None,
+        params: dict[str, Any] | None = None,
+        json: dict[str, Any] | None = None,
+        data: dict[str, Any] | None = None,
         **kwargs,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         async def _call():
             try:
                 response = await self.client.request(
@@ -108,25 +108,25 @@ class APIClient:
             except httpx.HTTPStatusError as e:
                 raise APIClientError(
                     f"HTTP error: {e.response.status_code}", status_code=e.response.status_code
-                )
+                ) from e
             except httpx.RequestError as e:
-                raise APIClientError(f"Request error: {str(e)}")
+                raise APIClientError(f"Request error: {str(e)}") from e
 
         try:
             return await self.breaker.call(_call)
         except pybreaker.CircuitBreakerError:
-            raise CircuitBreakerOpen()
+            raise CircuitBreakerOpen() from None
 
-    async def get(self, url: str, **kwargs) -> Dict[str, Any]:
+    async def get(self, url: str, **kwargs) -> dict[str, Any]:
         return await self.request("GET", url, **kwargs)
 
-    async def post(self, url: str, **kwargs) -> Dict[str, Any]:
+    async def post(self, url: str, **kwargs) -> dict[str, Any]:
         return await self.request("POST", url, **kwargs)
 
-    async def put(self, url: str, **kwargs) -> Dict[str, Any]:
+    async def put(self, url: str, **kwargs) -> dict[str, Any]:
         return await self.request("PUT", url, **kwargs)
 
-    async def delete(self, url: str, **kwargs) -> Dict[str, Any]:
+    async def delete(self, url: str, **kwargs) -> dict[str, Any]:
         return await self.request("DELETE", url, **kwargs)
 
     async def close(self):
@@ -142,12 +142,12 @@ class JiraClient(APIClient):
         super().__init__(base_url)
         self.client.auth = (email, api_token)
 
-    async def query_ticket(self, ticket_id: str) -> Dict[str, Any]:
+    async def query_ticket(self, ticket_id: str) -> dict[str, Any]:
         return await self.get(f"/rest/api/3/issue/{ticket_id}")
 
     async def create_ticket(
         self, project: str, summary: str, description: str, issue_type: str = "Bug"
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return await self.post(
             "/rest/api/3/issue",
             json={
@@ -160,7 +160,7 @@ class JiraClient(APIClient):
             },
         )
 
-    async def add_comment(self, ticket_id: str, comment: str) -> Dict[str, Any]:
+    async def add_comment(self, ticket_id: str, comment: str) -> dict[str, Any]:
         return await self.post(
             f"/rest/api/3/issue/{ticket_id}/comment",
             json={"body": {"content": [{"type": "text", "text": comment}]}},
@@ -174,12 +174,12 @@ class ZendeskClient(APIClient):
         super().__init__(base_url)
         self.client.auth = (f"{email}/token", api_token)
 
-    async def query_ticket(self, ticket_id: str) -> Dict[str, Any]:
+    async def query_ticket(self, ticket_id: str) -> dict[str, Any]:
         return await self.get(f"/api/v2/tickets/{ticket_id}.json")
 
     async def create_ticket(
         self, subject: str, description: str, requester_email: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         return await self.post(
             "/api/v2/tickets.json",
             json={

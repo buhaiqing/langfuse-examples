@@ -6,22 +6,16 @@
 
 import logging
 import traceback
-from fastapi import Request, status
-from fastapi.responses import JSONResponse
-from fastapi.exceptions import RequestValidationError, HTTPException
-from pydantic import ValidationError
 
 from core.config import settings
 from core.exceptions import (
     BusinessException,
     ErrorCode,
-    ValidationException,
-    AuthenticationException,
-    AuthorizationException,
-    ResourceNotFoundException,
-    RateLimitException,
-    ServiceUnavailableException,
 )
+from fastapi import Request, status
+from fastapi.exceptions import HTTPException, RequestValidationError
+from fastapi.responses import JSONResponse
+from pydantic import ValidationError
 
 logger = logging.getLogger(__name__)
 
@@ -70,15 +64,19 @@ async def business_exception_handler(request: Request, exc: BusinessException) -
     )
 
 
-async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+async def validation_exception_handler(
+    request: Request, exc: RequestValidationError
+) -> JSONResponse:
     """处理请求验证异常（FastAPI）"""
     errors = []
     for error in exc.errors():
-        errors.append({
-            "field": ".".join(str(x) for x in error["loc"]),
-            "message": error["msg"],
-            "type": error["type"],
-        })
+        errors.append(
+            {
+                "field": ".".join(str(x) for x in error["loc"]),
+                "message": error["msg"],
+                "type": error["type"],
+            }
+        )
 
     logger.warning(
         f"Validation error: {errors}",
@@ -94,15 +92,19 @@ async def validation_exception_handler(request: Request, exc: RequestValidationE
     )
 
 
-async def pydantic_validation_exception_handler(request: Request, exc: ValidationError) -> JSONResponse:
+async def pydantic_validation_exception_handler(
+    request: Request, exc: ValidationError
+) -> JSONResponse:
     """处理 Pydantic 验证异常"""
     errors = []
     for error in exc.errors():
-        errors.append({
-            "field": ".".join(str(x) for x in error["loc"]),
-            "message": error["msg"],
-            "type": error["type"],
-        })
+        errors.append(
+            {
+                "field": ".".join(str(x) for x in error["loc"]),
+                "message": error["msg"],
+                "type": error["type"],
+            }
+        )
 
     logger.warning(
         f"Pydantic validation error: {errors}",

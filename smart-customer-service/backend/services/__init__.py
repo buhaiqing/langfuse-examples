@@ -10,49 +10,44 @@
 - 客服状态服务
 """
 
-from services.intent_recognition import (
-    IntentRecognitionService,
-    IntentRecognitionResult,
-    Entity,
-    INTENT_DEFINITIONS,
-    intent_service,
+from services.agent_status_service import (
+    AgentInfo,
+    AgentPerformance,
+    AgentRole,
+    AgentStatus,
+    AgentStatusChange,
+    AgentStatusService,
+    get_agent_status_service,
+    init_agent_status_service,
 )
-
-from services.rag_service import (
-    RAGService,
-    RAGQueryResult,
-    rag_service,
-)
-
-from services.escalation_service import (
-    EscalationService,
-    EscalationRequest,
-    escalation_service,
-)
-
 from services.analytics import (
     AnalyticsService,
     analytics_service,
 )
-
+from services.escalation_service import (
+    EscalationRequest,
+    EscalationService,
+    escalation_service,
+)
+from services.intent_recognition import (
+    INTENT_DEFINITIONS,
+    Entity,
+    IntentRecognitionResult,
+    IntentRecognitionService,
+    intent_service,
+)
+from services.rag_service import (
+    RAGQueryResult,
+    RAGService,
+    rag_service,
+)
 from services.websocket_sync import (
-    WSMessageType,
     PubSubMessage,
     RedisPubSubManager,
     WebSocketSyncService,
+    WSMessageType,
     get_ws_sync_service,
     init_ws_sync_service,
-)
-
-from services.agent_status_service import (
-    AgentStatus,
-    AgentRole,
-    AgentInfo,
-    AgentStatusChange,
-    AgentPerformance,
-    AgentStatusService,
-    get_agent_status_service,
-    init_agent_status_service,
 )
 
 __all__ = [

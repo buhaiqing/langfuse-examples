@@ -1,11 +1,14 @@
-"""数据库模型定义"""
+"""数据库模型定义
 
-from datetime import datetime
-from typing import Optional, Dict, Any
-from sqlalchemy import Column, String, Text, DateTime, Integer, JSON, ForeignKey, Index
-from sqlalchemy.orm import relationship, declarative_base
-from sqlalchemy.dialects.postgresql import UUID
+所有时间字段使用 timezone-aware UTC 时间。
+"""
+
 import uuid
+
+from sqlalchemy import JSON, Column, DateTime, ForeignKey, Index, Integer, String, Text
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import declarative_base, relationship
+from utils import utcnow
 
 Base = declarative_base()
 
@@ -20,8 +23,8 @@ class Document(Base):
     content = Column(Text, nullable=False)
     metadata = Column(JSON, default=dict)
     version = Column(Integer, default=1)
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
+    updated_at = Column(DateTime, default=utcnow, onupdate=utcnow)
 
     versions = relationship(
         "DocumentVersion", back_populates="document", cascade="all, delete-orphan"
@@ -42,7 +45,7 @@ class DocumentVersion(Base):
     document_id = Column(UUID(as_uuid=True), ForeignKey("documents.id"), nullable=False)
     version = Column(Integer, nullable=False)
     content = Column(Text, nullable=False)
-    created_at = Column(DateTime, default=datetime.utcnow)
+    created_at = Column(DateTime, default=utcnow)
 
     document = relationship("Document", back_populates="versions")
 
@@ -63,7 +66,7 @@ class AuditLog(Base):
     resource_type = Column(String(50))
     resource_id = Column(String(100))
     details = Column(JSON)
-    created_at = Column(DateTime, default=datetime.utcnow, index=True)
+    created_at = Column(DateTime, default=utcnow, index=True)
 
     __table_args__ = (Index("ix_auditlogs_user_time", "user_id", "created_at"),)
 
@@ -82,7 +85,7 @@ class ConversationArchive(Base):
     messages = Column(JSON, nullable=False)
     final_status = Column(String(50))
     metrics = Column(JSON)
-    archived_at = Column(DateTime, default=datetime.utcnow)
+    archived_at = Column(DateTime, default=utcnow)
 
     __table_args__ = (Index("ix_archives_user_time", "user_id", "archived_at"),)
 
