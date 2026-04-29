@@ -5,17 +5,18 @@ Provides alert rule configuration, threshold monitoring, and notification channe
 """
 
 import logging
-from typing import Any, Optional, Callable
+from collections.abc import Callable
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
-import json
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
 
 class AlertSeverity(Enum):
     """Alert severity levels."""
+
     INFO = "info"
     WARNING = "warning"
     CRITICAL = "critical"
@@ -23,6 +24,7 @@ class AlertSeverity(Enum):
 
 class AlertChannel(Enum):
     """Notification channel types."""
+
     SLACK = "slack"
     EMAIL = "email"
     WEBHOOK = "webhook"
@@ -32,6 +34,7 @@ class AlertChannel(Enum):
 @dataclass
 class AlertRule:
     """Represents an alert rule configuration."""
+
     name: str
     metric: str
     threshold: float
@@ -46,6 +49,7 @@ class AlertRule:
 @dataclass
 class Alert:
     """Represents a triggered alert."""
+
     rule: AlertRule
     triggered_at: str
     value: float
@@ -56,20 +60,30 @@ class Alert:
 class AlertManager:
     """
     Manages alert rules and notifications.
-    
+
     Handles rule configuration, threshold checking, and multi-channel notifications.
+    Includes alert deduplication with configurable cooldown periods.
     """
 
-    def __init__(self):
+    def __init__(self, default_cooldown_minutes: int = 30):
+        """
+        Initialize AlertManager.
+
+        Args:
+            default_cooldown_minutes: Default cooldown period between alerts (minutes).
+        """
         self._rules: dict[str, AlertRule] = {}
         self._alerts: list[Alert] = []
         self._notification_handlers: dict[AlertChannel, Callable] = {}
+        self._cooldown_minutes: int = default_cooldown_minutes
+        self._last_alert_time: dict[str, datetime] = {}  # Rule name -> last alert time
+        self._alert_counts: dict[str, list[datetime]] = {}  # Rule name -> list of alert times
 
     def register_rule(self, rule: AlertRule) -> None:
         """Register an alert rule."""
         self._rules[rule.name] = rule
 
-    def get_rule(self, name: str) -> Optional[AlertRule]:
+    def get_rule(self, name: str) -> AlertRule | None:
         """Get a specific alert rule."""
         return self._rules.get(name)
 
@@ -92,19 +106,23 @@ class AlertManager:
         """Register a notification handler for a channel."""
         self._notification_handlers[channel] = handler
 
-    def check_rule(self, rule_name: str, current_value: float) -> Optional[Alert]:
+    def check_rule(self, rule_name: str, current_value: float) -> Alert | None:
         """
         Check if a rule should trigger.
-        
+
         Args:
             rule_name: Name of the rule to check.
             current_value: Current metric value.
-            
+
         Returns:
             Alert if triggered, None otherwise.
         """
         rule = self.get_rule(rule_name)
         if not rule or not rule.enabled:
+            return None
+
+        # Check cooldown period
+        if not self._is_alert_allowed(rule_name, rule):
             return None
 
         triggered = False
@@ -128,6 +146,7 @@ class AlertManager:
                 context={"rule_name": rule_name, "current_value": current_value},
             )
             self._alerts.append(alert)
+            self._record_alert_time(rule_name)
             self._send_notifications(alert)
             return alert
 
@@ -143,7 +162,65 @@ class AlertManager:
                 except Exception as e:
                     logger.error("Failed to send %s notification: %s", channel.value, e)
 
-    def get_triggered_alerts(self, rule_name: Optional[str] = None) -> list[Alert]:
+    def _is_alert_allowed(self, rule_name: str, rule: AlertRule) -> bool:
+        """
+        Check if an alert is allowed based on cooldown and rate limits.
+
+        Args:
+            rule_name: Name of the rule.
+            rule: AlertRule instance.
+
+        Returns:
+            True if alert is allowed, False if in cooldown or rate limited.
+        """
+        now = datetime.now(timezone.utc)
+
+        # Check cooldown period
+        last_time = self._last_alert_time.get(rule_name)
+        if last_time:
+            cooldown = rule.metadata.get("cooldown_minutes", self._cooldown_minutes)
+            elapsed = (now - last_time).total_seconds() / 60
+            if elapsed < cooldown:
+                logger.debug(
+                    "Alert '%s' in cooldown (%.1fmin remaining)",
+                    rule_name,
+                    cooldown - elapsed,
+                )
+                return False
+
+        # Check max alerts per hour
+        max_per_hour = rule.metadata.get("max_alerts_per_hour")
+        if max_per_hour:
+            recent_alerts = self._alert_counts.get(rule_name, [])
+            # Count alerts in the last hour
+            one_hour_ago = now - timedelta(hours=1)
+            recent_count = sum(1 for t in recent_alerts if t > one_hour_ago)
+
+            if recent_count >= max_per_hour:
+                logger.debug(
+                    "Alert '%s' rate limited (%d/%d per hour)",
+                    rule_name,
+                    recent_count,
+                    max_per_hour,
+                )
+                return False
+
+        return True
+
+    def _record_alert_time(self, rule_name: str) -> None:
+        """Record the time an alert was triggered."""
+        now = datetime.now(timezone.utc)
+        self._last_alert_time[rule_name] = now
+
+        if rule_name not in self._alert_counts:
+            self._alert_counts[rule_name] = []
+        self._alert_counts[rule_name].append(now)
+
+        # Clean up old entries (keep only last 2 hours)
+        cutoff = now - timedelta(hours=2)
+        self._alert_counts[rule_name] = [t for t in self._alert_counts[rule_name] if t > cutoff]
+
+    def get_triggered_alerts(self, rule_name: str | None = None) -> list[Alert]:
         """Get previously triggered alerts."""
         if rule_name:
             return [a for a in self._alerts if a.rule.name == rule_name]
@@ -168,7 +245,7 @@ class AlertManager:
         }
 
 
-_alert_manager: Optional[AlertManager] = None
+_alert_manager: AlertManager | None = None
 
 
 def get_alert_manager() -> AlertManager:
@@ -182,7 +259,7 @@ def get_alert_manager() -> AlertManager:
 def configure_success_rate_alert(
     threshold: float = 0.99,
     severity: AlertSeverity = AlertSeverity.WARNING,
-    channels: Optional[list[AlertChannel]] = None,
+    channels: list[AlertChannel] | None = None,
 ) -> AlertRule:
     """Configure a success rate alert."""
     rule = AlertRule(
@@ -201,7 +278,7 @@ def configure_success_rate_alert(
 def configure_latency_alert(
     threshold_ms: float = 500,
     severity: AlertSeverity = AlertSeverity.WARNING,
-    channels: Optional[list[AlertChannel]] = None,
+    channels: list[AlertChannel] | None = None,
 ) -> AlertRule:
     """Configure a latency alert (P95)."""
     rule = AlertRule(
@@ -217,11 +294,11 @@ def configure_latency_alert(
     return rule
 
 
-def check_success_rate(current_rate: float) -> Optional[Alert]:
+def check_success_rate(current_rate: float) -> Alert | None:
     """Check success rate against configured threshold."""
     return get_alert_manager().check_rule("success-rate-low", current_rate)
 
 
-def check_latency(current_latency_ms: float) -> Optional[Alert]:
+def check_latency(current_latency_ms: float) -> Alert | None:
     """Check latency against configured threshold."""
     return get_alert_manager().check_rule("latency-high", current_latency_ms)

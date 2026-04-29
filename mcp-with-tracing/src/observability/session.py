@@ -4,15 +4,15 @@ Session management for MCP Langfuse Observability.
 
 import logging
 import uuid
-from typing import Any, Optional
 from contextvars import ContextVar
 from datetime import datetime, timezone
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
-_session_context: ContextVar[dict[str, Any]] = ContextVar(
+_session_context: ContextVar[dict[str, Any] | None] = ContextVar(
     "session_context",
-    default={},
+    default=None,
 )
 
 
@@ -38,9 +38,9 @@ class SessionManager:
 
     @staticmethod
     def create_session(
-        session_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Create a new session context.
@@ -65,8 +65,8 @@ class SessionManager:
     def set_session(
         cls,
         session_id: str,
-        user_id: Optional[str] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        user_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """
         Set session context in contextvars.
@@ -81,19 +81,37 @@ class SessionManager:
 
     @classmethod
     def get_session(cls) -> dict[str, Any]:
-        """Get current session context."""
-        return _session_context.get()
+        """Get current session context.
+
+        Returns:
+            Session context dictionary, or empty dict if not set.
+        """
+        ctx = _session_context.get()
+        # Return a copy to prevent external mutation
+        return ctx.copy() if ctx is not None else {}
 
     @classmethod
-    def get_session_id(cls) -> Optional[str]:
-        """Get current session ID."""
+    def get_session_id(cls) -> str | None:
+        """Get current session ID.
+
+        Returns:
+            Session ID string or None if not set.
+        """
         ctx = _session_context.get()
+        if ctx is None:
+            return None
         return ctx.get("session_id")
 
     @classmethod
-    def get_user_id(cls) -> Optional[str]:
-        """Get current user ID."""
+    def get_user_id(cls) -> str | None:
+        """Get current user ID.
+
+        Returns:
+            User ID string or None if not set.
+        """
         ctx = _session_context.get()
+        if ctx is None:
+            return None
         return ctx.get("user_id")
 
     @classmethod
@@ -104,9 +122,9 @@ class SessionManager:
     @classmethod
     def start_session(
         cls,
-        session_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> dict[str, Any]:
         """
         Start a new session and set it in context.
@@ -124,20 +142,20 @@ class SessionManager:
         return ctx
 
 
-def get_session_id() -> Optional[str]:
+def get_session_id() -> str | None:
     """Get current session ID from context."""
     return SessionManager.get_session_id()
 
 
-def get_user_id() -> Optional[str]:
+def get_user_id() -> str | None:
     """Get current user ID from context."""
     return SessionManager.get_user_id()
 
 
 def set_session(
     session_id: str,
-    user_id: Optional[str] = None,
-    metadata: Optional[dict[str, Any]] = None,
+    user_id: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> None:
     """Set session context."""
     SessionManager.set_session(session_id, user_id, metadata)

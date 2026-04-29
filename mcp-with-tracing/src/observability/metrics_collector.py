@@ -6,9 +6,12 @@ including success rate, latency, request rate, and user satisfaction.
 """
 
 import logging
-from typing import Optional, Dict, List, Any
-from datetime import datetime, timezone, timedelta
 from dataclasses import dataclass, field
+from datetime import datetime, timedelta, timezone
+from typing import TYPE_CHECKING, Any, Optional
+
+if TYPE_CHECKING:
+    from langfuse import Langfuse
 
 from src.observability.instrumentation import get_langfuse_client
 
@@ -20,7 +23,7 @@ class MetricPoint:
     """Represents a single metric data point."""
     timestamp: datetime
     value: float
-    metadata: Dict[str, Any] = field(default_factory=dict)
+    metadata: dict[str, Any] = field(default_factory=dict)
 
 
 class MetricsCollector:
@@ -41,13 +44,13 @@ class MetricsCollector:
             window_minutes: Time window for metric calculation (in minutes).
         """
         self.window_minutes = window_minutes
-        self._metrics_cache: Dict[str, List[MetricPoint]] = {}
+        self._metrics_cache: dict[str, list[MetricPoint]] = {}
 
     def _get_client(self) -> Optional["Langfuse"]:
         """Get the Langfuse client, returning None if unavailable."""
         return get_langfuse_client()
 
-    def collect_success_rate(self, session_id: Optional[str] = None) -> float:
+    def collect_success_rate(self, session_id: str | None = None) -> float:
         """
         Calculate success rate within the time window.
 
@@ -71,7 +74,7 @@ class MetricsCollector:
         success_rate = (total_count - error_count) / total_count
         return success_rate
 
-    def collect_latency_p95(self, session_id: Optional[str] = None) -> float:
+    def collect_latency_p95(self, session_id: str | None = None) -> float:
         """
         Calculate P95 latency within the time window.
 
@@ -115,7 +118,7 @@ class MetricsCollector:
 
         return qps
 
-    def collect_avg_satisfaction(self) -> Optional[float]:
+    def collect_avg_satisfaction(self) -> float | None:
         """
         Calculate average user satisfaction score within the time window.
 
@@ -138,8 +141,8 @@ class MetricsCollector:
         self,
         metric_name: str,
         hours: int = 24,
-        interval_minutes: Optional[int] = None
-    ):
+        interval_minutes: int | None = None,
+    ) -> Any:  # pd.DataFrame
         """
         Get historical data for model training.
 
@@ -154,7 +157,6 @@ class MetricsCollector:
                 - ds: datetime
                 - y: metric value
         """
-        import numpy as np
         import pandas as pd
 
         if interval_minutes is None:
@@ -193,8 +195,8 @@ class MetricsCollector:
 
     def _fetch_traces(
         self,
-        session_id: Optional[str] = None
-    ) -> List[Any]:
+        session_id: str | None = None,
+    ) -> list[Any]:
         """
         Fetch traces from Langfuse within the time window.
 
@@ -236,8 +238,8 @@ class MetricsCollector:
         self,
         metric_name: str,
         window_start: datetime,
-        window_end: datetime
-    ) -> Optional[float]:
+        window_end: datetime,
+    ) -> float | None:
         """
         Calculate a specific metric for a given time window.
 

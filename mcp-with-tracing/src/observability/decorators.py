@@ -7,17 +7,17 @@ and track_session/track_prompt_version decorators for metadata attachment.
 
 import asyncio
 import logging
+from collections.abc import Callable
 from functools import wraps
-from typing import Callable, Optional
 
 from src.observability.instrumentation import get_langfuse_client
-from src.observability.session import SessionManager
 from src.observability.prompt_versioning import get_active_prompt_version
+from src.observability.session import SessionManager
 
 logger = logging.getLogger(__name__)
 
 
-def observe_tool(name: Optional[str] = None):
+def observe_tool(name: str | None = None) -> Callable[[Callable], Callable]:
     """Decorator to observe MCP tool executions with real Langfuse traces.
 
     Creates a Langfuse trace with a span observation for each tool call,
@@ -115,7 +115,7 @@ def observe_tool(name: Optional[str] = None):
     return decorator
 
 
-def track_session(session_id: str, user_id: Optional[str] = None):
+def track_session(session_id: str, user_id: str | None = None):
     """Decorator to set session context before function execution.
 
     Sets the session context in SessionManager so that observe_tool
@@ -143,7 +143,7 @@ def track_session(session_id: str, user_id: Optional[str] = None):
     return decorator
 
 
-def track_prompt_version(prompt_id: str, version: Optional[str] = None):
+def track_prompt_version(prompt_id: str, version: str | None = None):
     """Decorator to attach prompt version metadata to traces.
 
     Records the prompt version in the Langfuse trace metadata

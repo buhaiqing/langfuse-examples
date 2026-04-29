@@ -92,21 +92,26 @@ docs:
 # Install dependencies
 install:
 	@echo "Installing dependencies..."
-	pip install -r requirements.txt
-	pip install pytest pytest-cov pytest-xdist pytest-asyncio
+	uv sync
 
 install-dev:
 	@echo "Installing development dependencies..."
-	pip install -r requirements.txt
-	pip install pytest pytest-cov pytest-xdist pytest-asyncio
-	pip install black isort ruff mypy
+	uv sync --all-extras
 
 # Quick test during development
 dev:
 	@echo "Quick test (unit tests only, no coverage)..."
-	pytest tests/unit/ -v -n 2 --no-cov -x
+	uv run pytest tests/unit/ -v -n 2 --no-cov -x
 
 # Watch mode (requires pytest-watch)
 watch:
 	@echo "Watching for changes..."
-	ptw tests/unit/ --runner="pytest -v -n 2"
+	uv run ptw tests/unit/ --runner="uv run pytest -v -n 2"
+
+# Code quality checks
+check-all:
+	@echo "Running all checks..."
+	uv run ruff check src/ tests/
+	uv run black --check src/ tests/
+	uv run mypy src/
+	uv run pytest tests/ -v --cov=src
