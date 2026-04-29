@@ -13,6 +13,7 @@ from typing import TYPE_CHECKING, Any, Optional
 if TYPE_CHECKING:
     from langfuse import Langfuse
 
+from src.observability.cache import TTLCache
 from src.observability.instrumentation import get_langfuse_client
 
 logger = logging.getLogger(__name__)
@@ -21,6 +22,7 @@ logger = logging.getLogger(__name__)
 @dataclass
 class MetricPoint:
     """Represents a single metric data point."""
+
     timestamp: datetime
     value: float
     metadata: dict[str, Any] = field(default_factory=dict)
@@ -36,15 +38,17 @@ class MetricsCollector:
     Uses the shared Langfuse client from get_langfuse_client().
     """
 
-    def __init__(self, window_minutes: int = 10):
+    def __init__(self, window_minutes: int = 10, cache_ttl: int = 300):
         """
         Initialize the metrics collector.
 
         Args:
             window_minutes: Time window for metric calculation (in minutes).
+            cache_ttl: Cache lifetime in seconds (default: 5 minutes).
         """
         self.window_minutes = window_minutes
         self._metrics_cache: dict[str, list[MetricPoint]] = {}
+        self._trace_cache = TTLCache(ttl=cache_ttl, max_size=64)
 
     def _get_client(self) -> Optional["Langfuse"]:
         """Get the Langfuse client, returning None if unavailable."""
@@ -67,8 +71,7 @@ class MetricsCollector:
 
         total_count = len(traces)
         error_count = sum(
-            1 for trace in traces
-            if hasattr(trace, 'status') and trace.status == 'ERROR'
+            1 for trace in traces if hasattr(trace, "status") and trace.status == "ERROR"
         )
 
         success_rate = (total_count - error_count) / total_count
@@ -91,13 +94,14 @@ class MetricsCollector:
 
         durations = []
         for trace in traces:
-            if hasattr(trace, 'duration') and trace.duration is not None:
+            if hasattr(trace, "duration") and trace.duration is not None:
                 durations.append(trace.duration)
 
         if not durations:
             return 0.0
 
         import numpy as np
+
         p95_latency = np.percentile(durations, 95)
         return float(p95_latency)
 
@@ -130,6 +134,7 @@ class MetricsCollector:
         """
         try:
             from src.observability.feedback import get_feedback_collector
+
             collector = get_feedback_collector()
             avg_rating = collector.get_average_rating()
             return avg_rating
@@ -165,11 +170,7 @@ class MetricsCollector:
         end_time = datetime.now(timezone.utc)
         start_time = end_time - timedelta(hours=hours)
 
-        intervals = pd.date_range(
-            start=start_time,
-            end=end_time,
-            freq=f'{interval_minutes}min'
-        )
+        intervals = pd.date_range(start=start_time, end=end_time, freq=f"{interval_minutes}min")
 
         values = []
         timestamps = []
@@ -178,18 +179,13 @@ class MetricsCollector:
             window_start = intervals[i]
             window_end = intervals[i + 1]
 
-            value = self._calculate_metric_for_window(
-                metric_name, window_start, window_end
-            )
+            value = self._calculate_metric_for_window(metric_name, window_start, window_end)
 
             if value is not None:
                 values.append(value)
                 timestamps.append(window_end)
 
-        df = pd.DataFrame({
-            'ds': timestamps,
-            'y': values
-        })
+        df = pd.DataFrame({"ds": timestamps, "y": values})
 
         return df
 
@@ -201,6 +197,7 @@ class MetricsCollector:
         Fetch traces from Langfuse within the time window.
 
         Uses lf.get_traces() which is the high-level SDK API.
+        Implements TTL caching to reduce redundant API calls.
 
         Args:
             session_id: Optional session filter.
@@ -208,6 +205,16 @@ class MetricsCollector:
         Returns:
             List of trace objects.
         """
+        # Generate cache key
+        cache_key = f"traces:{session_id or 'all'}:{self.window_minutes}"
+
+        # Check cache first
+        cached_traces = self._trace_cache.get(cache_key)
+        if cached_traces is not None:
+            logger.debug("Trace cache hit for key: %s", cache_key)
+            return cached_traces
+
+        # Cache miss - fetch from API
         client = self._get_client()
         if not client:
             logger.debug("Langfuse client not available, returning empty traces")
@@ -217,17 +224,21 @@ class MetricsCollector:
             from_timestamp = datetime.now(timezone.utc) - timedelta(minutes=self.window_minutes)
 
             kwargs = {
-                'limit': 1000,
-                'from_timestamp': from_timestamp,
+                "limit": 1000,
+                "from_timestamp": from_timestamp,
             }
 
             if session_id:
-                kwargs['session_id'] = session_id
+                kwargs["session_id"] = session_id
 
             response = client.get_traces(**kwargs)
 
-            if hasattr(response, 'data'):
-                return response.data
+            if hasattr(response, "data"):
+                traces = response.data
+                # Cache the result
+                self._trace_cache.set(cache_key, traces)
+                logger.debug("Cached %d traces for key: %s", len(traces), cache_key)
+                return traces
             return []
 
         except Exception as e:
@@ -259,40 +270,36 @@ class MetricsCollector:
 
         try:
             kwargs = {
-                'limit': 1000,
-                'from_timestamp': window_start,
+                "limit": 1000,
+                "from_timestamp": window_start,
             }
 
             response = client.get_traces(**kwargs)
-            traces = response.data if hasattr(response, 'data') else []
+            traces = response.data if hasattr(response, "data") else []
 
             if not traces:
                 return None
 
-            if metric_name == 'success_rate':
+            if metric_name == "success_rate":
                 total = len(traces)
-                errors = sum(
-                    1 for t in traces
-                    if hasattr(t, 'status') and t.status == 'ERROR'
-                )
+                errors = sum(1 for t in traces if hasattr(t, "status") and t.status == "ERROR")
                 return (total - errors) / total
 
-            elif metric_name == 'latency_p95':
+            elif metric_name == "latency_p95":
                 durations = [
-                    t.duration for t in traces
-                    if hasattr(t, 'duration') and t.duration is not None
+                    t.duration for t in traces if hasattr(t, "duration") and t.duration is not None
                 ]
                 if not durations:
                     return None
                 return float(np.percentile(durations, 95))
 
-            elif metric_name == 'request_rate':
+            elif metric_name == "request_rate":
                 window_seconds = (window_end - window_start).total_seconds()
                 if window_seconds == 0:
                     return None
                 return len(traces) / window_seconds
 
-            elif metric_name == 'satisfaction':
+            elif metric_name == "satisfaction":
                 return None
 
             return None
@@ -300,3 +307,36 @@ class MetricsCollector:
         except Exception as e:
             logger.warning("Failed to calculate metric %s: %s", metric_name, e)
             return None
+
+    def get_cache_stats(self) -> dict[str, Any]:
+        """
+        Get cache statistics for monitoring.
+
+        Returns:
+            Dictionary with cache hit rate, size, and configuration.
+        """
+        return {
+            "hit_rate": self._trace_cache.hit_rate,
+            "size": self._trace_cache.size,
+            "max_size": self._trace_cache.max_size,
+            "ttl_seconds": self._trace_cache.ttl,
+        }
+
+    def clear_cache(self) -> None:
+        """Clear all cached traces."""
+        self._trace_cache.clear()
+        logger.info("Metrics collector cache cleared")
+
+    def invalidate_cache(self, session_id: str | None = None) -> None:
+        """
+        Invalidate cache for specific session or all sessions.
+
+        Args:
+            session_id: Session ID to invalidate, or None for all.
+        """
+        if session_id:
+            cache_key = f"traces:{session_id}:{self.window_minutes}"
+            self._trace_cache.invalidate(cache_key)
+            logger.info("Invalidated cache for session: %s", session_id)
+        else:
+            self.clear_cache()
