@@ -19,12 +19,36 @@ from src.observability.feedback import (
     record_rating,
     record_rejection,
 )
+from src.observability.health import get_health_status
 from src.observability.session import get_session_id
 from src.observability.smart_alerting import SmartAlertManager
 
 logger = logging.getLogger(__name__)
 
 mcp = FastMCP("MCP Langfuse Observability Server")
+
+
+# ============================================================================
+# Feedback Tools - User Satisfaction Collection
+# ============================================================================
+
+
+@mcp.tool()
+def health_check() -> dict:
+    """
+    Check the health status of the MCP server and all components.
+
+    Returns comprehensive health information including:
+    - Langfuse connection status
+    - Alert manager status and loaded rules
+    - Alert monitor running status
+    - Smart alert manager (ML anomaly detection) status
+    - Metrics cache statistics
+
+    Returns:
+        Dictionary containing health status of all components.
+    """
+    return get_health_status()
 
 
 # ============================================================================
