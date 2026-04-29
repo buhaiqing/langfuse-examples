@@ -220,12 +220,14 @@ class TestLangfuseObserverLifecycle:
 
     def test_flush_without_client(self):
         """Test flush method when client is None."""
-        config = ObservabilityConfig()
-        config.enabled = False
-        observer = LangfuseObserver(config)
-        assert observer.client is None
+        # Override the auto-mock to test without client
+        with patch('src.observability.instrumentation._langfuse_client', None):
+            config = ObservabilityConfig()
+            config.enabled = False
+            observer = LangfuseObserver(config)
+            assert observer.client is None
 
-        observer.flush()
+            observer.flush()
 
     @patch("src.observability.langfuse_client.get_langfuse_client")
     def test_shutdown_with_client(self, mock_get_client):
@@ -240,12 +242,14 @@ class TestLangfuseObserverLifecycle:
 
     def test_shutdown_without_client(self):
         """Test shutdown method when client is None."""
-        config = ObservabilityConfig()
-        config.enabled = False
-        observer = LangfuseObserver(config)
-        assert observer.client is None
+        # Override the auto-mock to test without client
+        with patch('src.observability.instrumentation._langfuse_client', None):
+            config = ObservabilityConfig()
+            config.enabled = False
+            observer = LangfuseObserver(config)
+            assert observer.client is None
 
-        observer.shutdown()
+            observer.shutdown()
 
 
 class TestGlobalObserverFunctions:

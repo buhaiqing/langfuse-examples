@@ -45,7 +45,8 @@ class TestSmartAlertManager:
         assert manager.metrics_collector is not None
         assert manager.anomaly_detector is not None
         assert manager._last_detection_time is None
-        assert manager._monitoring_thread is None
+        assert manager._scheduler is None
+        assert manager._is_running is False
 
     def test_run_detection_cycle_first_time(self, mock_components):
         """Test first detection cycle (with model training)."""
@@ -181,8 +182,9 @@ class TestSmartAlertManager:
         assert 'multivariate' in stats['by_type']
         assert 'success_rate' in stats['by_metric']
 
-    def test_monitoring_thread_start_stop(self, mock_components):
-        """Test starting and stopping monitoring thread."""
+    @pytest.mark.asyncio
+    async def test_monitoring_thread_start_stop(self, mock_components):
+        """Test starting and stopping monitoring scheduler."""
         mock_collector, mock_detector = mock_components
 
         # Mock detection to return no anomalies quickly
@@ -193,21 +195,17 @@ class TestSmartAlertManager:
         # Start monitoring
         manager.start_monitoring()
 
-        assert manager._monitoring_thread is not None
-        assert manager._monitoring_thread.is_alive()
-
-        # Let it run briefly
-        time.sleep(2)
+        assert manager._scheduler is not None
+        assert manager._is_running is True
 
         # Stop monitoring
         manager.stop_monitoring()
 
-        # Thread should stop (with timeout)
-        manager._monitoring_thread.join(timeout=5)
-        assert not manager._monitoring_thread.is_alive()
+        assert manager._is_running is False
 
-    def test_monitoring_thread_already_running(self, mock_components):
-        """Test that starting monitoring twice doesn't create multiple threads."""
+    @pytest.mark.asyncio
+    async def test_monitoring_thread_already_running(self, mock_components):
+        """Test that starting monitoring twice doesn't create multiple schedulers."""
         mock_collector, mock_detector = mock_components
 
         mock_detector.detect_anomalies.return_value = []
@@ -216,13 +214,13 @@ class TestSmartAlertManager:
 
         # Start once
         manager.start_monitoring()
-        first_thread = manager._monitoring_thread
+        first_scheduler = manager._scheduler
 
         # Try to start again
         manager.start_monitoring()
 
-        # Should be the same thread
-        assert manager._monitoring_thread is first_thread
+        # Should be the same scheduler
+        assert manager._scheduler is first_scheduler
 
         # Cleanup
         manager.stop_monitoring()

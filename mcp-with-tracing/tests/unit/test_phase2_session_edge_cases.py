@@ -169,10 +169,8 @@ class TestContextVarsBehavior:
 
         # Check if original was affected
         current_id = get_session_id()
-        # If it's a reference, this would be "modified"
-        # If it's a copy, this would be "ref-test"
-        # Current implementation returns reference
-        assert current_id == "modified"
+        # Current implementation returns a copy, so original is unchanged
+        assert current_id == "ref-test"
 
 
 class TestSessionWithComplexMetadata:
