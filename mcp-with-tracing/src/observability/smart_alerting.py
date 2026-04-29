@@ -3,13 +3,15 @@ Smart alert manager with ML-based anomaly detection.
 
 Extends the base AlertManager with intelligent anomaly detection
 using Prophet and PyOD for proactive monitoring.
+Uses APScheduler AsyncIOScheduler for async-native scheduling.
 """
 
 import logging
-import threading
-import time
 from datetime import datetime, timezone
 from typing import Any
+
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from apscheduler.triggers.interval import IntervalTrigger
 
 from src.observability.alerting import (
     Alert,
@@ -26,7 +28,7 @@ logger = logging.getLogger(__name__)
 class SmartAlertManager(AlertManager):
     """
     Smart alert manager integrating ML-based anomaly detection.
-    
+
     Extends the base AlertManager with automated anomaly detection
     using time series forecasting and multivariate analysis.
     """
@@ -34,60 +36,54 @@ class SmartAlertManager(AlertManager):
     def __init__(self, detection_interval_minutes: int = 10):
         """
         Initialize the smart alert manager.
-        
+
         Args:
             detection_interval_minutes: Interval between detection cycles.
         """
         super().__init__()
-        self.metrics_collector = MetricsCollector(
-            window_minutes=detection_interval_minutes
-        )
+        self.metrics_collector = MetricsCollector(window_minutes=detection_interval_minutes)
         self.anomaly_detector = AnomalyDetector(self.metrics_collector)
         self.detection_interval = detection_interval_minutes
         self._last_detection_time: datetime | None = None
-        self._monitoring_thread: threading.Thread | None = None
-        self._stop_monitoring = False
+        self._scheduler: AsyncIOScheduler | None = None
+        self._is_running = False
 
     def start_monitoring(self) -> None:
         """
-        Start background monitoring thread.
-        
-        Launches a daemon thread that periodically runs anomaly detection
-        and triggers alerts when anomalies are detected.
+        Start background monitoring using AsyncIOScheduler.
+
+        Schedules periodic anomaly detection jobs using APScheduler's
+        async-native scheduler instead of threading.
         """
-        if self._monitoring_thread and self._monitoring_thread.is_alive():
+        if self._is_running:
             logger.warning("Monitoring is already running")
             return
 
-        self._stop_monitoring = False
+        self._scheduler = AsyncIOScheduler()
 
-        def monitoring_loop():
-            """Background monitoring loop."""
-            while not self._stop_monitoring:
-                try:
-                    self._run_detection_cycle()
-                except Exception as e:
-                    logger.error("Detection cycle failed: %s", e)
-
-                # Sleep in small increments to allow quick shutdown
-                for _ in range(self.detection_interval * 60):
-                    if self._stop_monitoring:
-                        break
-                    time.sleep(1)
-
-        self._monitoring_thread = threading.Thread(
-            target=monitoring_loop,
-            daemon=True,
-            name="SmartAlertMonitor"
+        # Schedule detection cycle
+        self._scheduler.add_job(
+            func=self._run_detection_cycle,
+            trigger=IntervalTrigger(minutes=self.detection_interval),
+            id="smart_alert_detection",
+            name="ML anomaly detection cycle",
+            replace_existing=True,
+            max_instances=1,  # Prevent overlapping executions
         )
-        self._monitoring_thread.start()
-        logger.info("Smart alert monitoring started (interval: %dmin)", self.detection_interval)
+
+        self._scheduler.start()
+        self._is_running = True
+        logger.info(
+            "Smart alert monitoring started (interval: %dmin)",
+            self.detection_interval,
+        )
 
     def stop_monitoring(self) -> None:
-        """Stop the background monitoring thread."""
-        self._stop_monitoring = True
-        if self._monitoring_thread:
-            self._monitoring_thread.join(timeout=30)
+        """Stop the background monitoring scheduler."""
+        if self._scheduler and self._is_running:
+            logger.info("Stopping smart alert monitoring...")
+            self._scheduler.shutdown(wait=True)
+            self._is_running = False
             logger.info("Smart alert monitoring stopped")
 
     def _run_detection_cycle(self) -> None:
@@ -120,14 +116,30 @@ class SmartAlertManager(AlertManager):
             logger.error("Detection cycle failed: %s", e, exc_info=True)
             self._last_detection_time = datetime.now(timezone.utc)
 
+    def get_status(self) -> dict[str, Any]:
+        """
+        Get current monitoring status.
+
+        Returns:
+            Dictionary with scheduler and detection status.
+        """
+        return {
+            "is_running": self._is_running,
+            "detection_interval_minutes": self.detection_interval,
+            "last_detection": (
+                self._last_detection_time.isoformat() if self._last_detection_time else None
+            ),
+            "scheduler_jobs": (len(self._scheduler.get_jobs()) if self._scheduler else 0),
+        }
+
     def _create_smart_alert(self, anomaly: dict[str, Any]) -> None:
         """
         Create an alert from anomaly detection results.
-        
+
         Args:
             anomaly: Anomaly detection result dictionary.
         """
-        if anomaly['type'] == 'univariate':
+        if anomaly["type"] == "univariate":
             rule_name = f"ml-anomaly-{anomaly['metric']}"
             message = (
                 f"🤖 ML检测到单指标异常\n"
@@ -138,11 +150,11 @@ class SmartAlertManager(AlertManager):
                 f"偏离分数: {anomaly['deviation_score']:.2f}\n"
                 f"严重程度: {anomaly['severity'].value.upper()}"
             )
-            threshold_value = anomaly.get('deviation_score', 0)
+            threshold_value = anomaly.get("deviation_score", 0)
 
-        elif anomaly['type'] == 'multivariate':
+        elif anomaly["type"] == "multivariate":
             rule_name = "ml-anomaly-multivariate"
-            features = anomaly['features']
+            features = anomaly["features"]
             message = (
                 f"🤖 ML检测到多维异常\n"
                 f"异常分数: {anomaly['anomaly_score']:.2f}\n"
@@ -152,7 +164,7 @@ class SmartAlertManager(AlertManager):
                 f"满意度: {features['satisfaction']:.2f}\n"
                 f"严重程度: {anomaly['severity'].value.upper()}"
             )
-            threshold_value = anomaly.get('anomaly_score', 0)
+            threshold_value = anomaly.get("anomaly_score", 0)
         else:
             return
 
@@ -162,14 +174,14 @@ class SmartAlertManager(AlertManager):
             metric="ml_anomaly_score",
             threshold=threshold_value,
             operator="gt",
-            severity=anomaly['severity'],
+            severity=anomaly["severity"],
             window_minutes=self.detection_interval,
             channels=[AlertChannel.SLACK, AlertChannel.WEBHOOK],
             metadata={
                 "ml_detected": True,
-                "anomaly_type": anomaly['type'],
-                "detection_method": "prophet_pyod"
-            }
+                "anomaly_type": anomaly["type"],
+                "detection_method": "prophet_pyod",
+            },
         )
 
         # Create and store alert
@@ -178,7 +190,7 @@ class SmartAlertManager(AlertManager):
             triggered_at=datetime.now(timezone.utc).isoformat(),
             value=threshold_value,
             message=message,
-            context=anomaly
+            context=anomaly,
         )
 
         self._alerts.append(alert)
@@ -186,29 +198,28 @@ class SmartAlertManager(AlertManager):
         # Send notifications
         self._send_notifications(alert)
 
-        logger.warning("Alert created: %s (%s)", rule_name, anomaly['severity'].value)
+        logger.warning("Alert created: %s (%s)", rule_name, anomaly["severity"].value)
 
     def get_ml_alert_statistics(self) -> dict[str, Any]:
         """
         Get statistics specific to ML-detected alerts.
-        
+
         Returns:
             Dictionary with ML alert statistics.
         """
         ml_alerts = [
-            alert for alert in self._alerts
-            if alert.rule.metadata.get('ml_detected', False)
+            alert for alert in self._alerts if alert.rule.metadata.get("ml_detected", False)
         ]
 
         by_type = {}
         by_metric = {}
 
         for alert in ml_alerts:
-            anomaly_type = alert.rule.metadata.get('anomaly_type', 'unknown')
+            anomaly_type = alert.rule.metadata.get("anomaly_type", "unknown")
             by_type[anomaly_type] = by_type.get(anomaly_type, 0) + 1
 
-            if anomaly_type == 'univariate':
-                metric = alert.context.get('metric', 'unknown')
+            if anomaly_type == "univariate":
+                metric = alert.context.get("metric", "unknown")
                 by_metric[metric] = by_metric.get(metric, 0) + 1
 
         return {
@@ -216,8 +227,6 @@ class SmartAlertManager(AlertManager):
             "by_type": by_type,
             "by_metric": by_metric,
             "last_detection": (
-                self._last_detection_time.isoformat()
-                if self._last_detection_time
-                else None
-            )
+                self._last_detection_time.isoformat() if self._last_detection_time else None
+            ),
         }
