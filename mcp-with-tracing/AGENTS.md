@@ -500,7 +500,7 @@ python scripts/trigger_test_alert.py
 
 ### Backend Development
 
-**Technology Stack**: Python 3.11+ with FastMCP Framework
+**Technology Stack**: Python 3.10+ with FastMCP Framework
 
 **Core Standards**:
 - ✅ Use `black` for formatting, `isort` for imports, `ruff` for linting

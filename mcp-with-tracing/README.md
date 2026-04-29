@@ -156,7 +156,7 @@ scripts/test_success_failure_tracking.py: 3/3 passed
 
 ## 技术栈
 
-- **Python**: 3.11+
+- **Python**: 3.10+
 - **Framework**: FastMCP 3.x
 - **Observability**: Langfuse 4.x
 - **Testing**: pytest 9.x

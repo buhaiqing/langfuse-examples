@@ -1,64 +1,12 @@
 # Langfuse Examples
 
-基于 Langfuse 构建的智能客服、MCP 可观测性和 Skill 可观测性平台示例项目。
+基于 Langfuse 构建的智能客服和 MCP 可观测性平台示例项目。
 
 ## 📦 项目概览
 
-本项目包含三个基于 Langfuse 的生产级应用示例:
+本项目包含两个基于 Langfuse 的生产级应用示例:
 
-### 1. [skill-observability-toolkit](skill-observability-toolkit/) - Skill 可观测性工具包
-
-**项目状态**: 96.2% ✅ (Phase 1-5 全部完成)
-
-**核心功能**:
-- ✅ **STOP Protocol**: L0-L3 协议实现 (Manifest, Tracing, Assertions, Trust Score)
-- ✅ **Langfuse 集成**: 完整的 Langfuse SDK 整合
-- ✅ **跨层追踪**: CI → Skill → MCP Trace ID 传播
-- ✅ **CI/CD 集成**: GitHub Actions + GitLab CI 支持
-- ✅ **告警系统**: 告警规则管理和通知
-- ✅ **反馈系统**: 收集和分析用户反馈
-- ✅ **性能指标**: 实时性能监控和聚合
-- ✅ **CLI 工具**: `stop init`, `stop validate`, `stop run`
-- ✅ **仪表板集成**: Grafana Dashboard support
-
-**项目统计**:
-- 核心模块: 25个
-- 代码行数: ~7,090行
-- 测试文件: 20个
-- 测试用例: 133 passed
-- 文档行数: ~1,706行
-- 代码质量: black, ruff, mypy pass
-
-**技术栈**:
-- Python 3.10+
-- Langfuse 4.x
-- Typer (CLI框架)
-- pytest (测试框架)
-- PyYAML (配置解析)
-
-**快速开始**:
-```bash
-cd skill-observability-toolkit
-pip install -e ".[dev]"
-
-# 创建 Skill
-stop init my-skill
-
-# 验证 Manifest
-stop validate
-
-# 运行测试
-pytest tests/
-
-# 构建或测试报告
-pytest tests/ --cov=src --cov-report=term-missing
-```
-
-📖 [查看详细文档](skill-observability-toolkit/README.md)
-
----
-
-### 2. [MCP with Tracing](mcp-with-tracing/) - MCP 可观测性平台
+### 1. [MCP with Tracing](mcp-with-tracing/) - MCP 可观测性平台
 
 生产级 LLM 可观测性平台，基于 Langfuse 为 MCP Server 提供完整的追踪、监控和告警能力。
 
@@ -78,7 +26,7 @@ pytest tests/ --cov=src --cov-report=term-missing
 - 代码覆盖率：核心模块 90%+
 
 **技术栈:**
-- Python 3.11+
+- Python 3.10+
 - FastMCP 3.x
 - Langfuse 4.x
 - pytest 9.x
@@ -95,7 +43,7 @@ python src/server.py
 
 ---
 
-### 3. [Smart Customer Service](smart-customer-service/) - 智能客服系统
+### 2. [Smart Customer Service](smart-customer-service/) - 智能客服系统
 
 **核心价值:**
 - ✅ **全链路可观测**: 打破智能客服会话黑盒,从进线到结束完整追踪
@@ -124,7 +72,7 @@ make run-demo       # 运行演示
 
 ## 🎯 共同特性
 
-三个项目都展示了 Langfuse 的核心能力:
+两个项目都展示了 Langfuse 的核心能力:
 
 1. **全链路追踪**: Trace → Span → Generation → Event 的完整层级
 2. **评分体系**: NUMERIC、CATEGORICAL、BOOLEAN 三种评分类型
@@ -225,7 +173,7 @@ make run-demo       # 运行演示
 - **开发效率提升**: 新功能上线周期缩短 50%
 - **运维成本降低**: 自动化监控减少 60% 的人工干预
 
-### 🎯 为什么选择这三个示例项目？
+### 🎯 为什么选择这两个示例项目？
 
 1. **经过验证的最佳实践**: 基于真实生产环境经验总结，避免常见陷阱
 2. **完整的解决方案**: 不仅提供代码，还包含配置、测试、文档等全套内容

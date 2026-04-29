@@ -43,7 +43,7 @@ select = ["E", "F", "I", "N", "W"]
 ignore = ["E501"]
 
 [tool.mypy]
-python_version = "3.11"
+python_version = "3.10"
 strict = true
 warn_return_any = true
 warn_unused_configs = true
