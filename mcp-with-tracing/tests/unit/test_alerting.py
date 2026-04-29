@@ -5,22 +5,22 @@ Tests cover alert rule management, threshold checking, notification channels,
 and alert statistics.
 """
 
-import pytest
 import logging
-from datetime import datetime, timezone
 from unittest.mock import Mock, patch
 
+import pytest
+
 from src.observability.alerting import (
+    Alert,
+    AlertChannel,
     AlertManager,
     AlertRule,
-    Alert,
     AlertSeverity,
-    AlertChannel,
-    get_alert_manager,
-    configure_success_rate_alert,
-    configure_latency_alert,
-    check_success_rate,
     check_latency,
+    check_success_rate,
+    configure_latency_alert,
+    configure_success_rate_alert,
+    get_alert_manager,
 )
 
 
@@ -351,7 +351,7 @@ class TestNotificationChannels:
 
         with caplog.at_level(logging.ERROR, logger="src.observability.alerting"):
             manager.check_rule("failing-notify", 150)
-        
+
         assert "Failed to send webhook notification" in caplog.text
 
 

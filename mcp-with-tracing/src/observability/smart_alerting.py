@@ -6,20 +6,19 @@ using Prophet and PyOD for proactive monitoring.
 """
 
 import logging
-from typing import Dict, Any, Optional
-from datetime import datetime, timezone
-import time
 import threading
+import time
+from datetime import datetime, timezone
+from typing import Any
 
 from src.observability.alerting import (
+    Alert,
+    AlertChannel,
     AlertManager,
     AlertRule,
-    Alert,
-    AlertSeverity,
-    AlertChannel,
 )
-from src.observability.metrics_collector import MetricsCollector
 from src.observability.anomaly_detector import AnomalyDetector
+from src.observability.metrics_collector import MetricsCollector
 
 logger = logging.getLogger(__name__)
 
@@ -45,8 +44,8 @@ class SmartAlertManager(AlertManager):
         )
         self.anomaly_detector = AnomalyDetector(self.metrics_collector)
         self.detection_interval = detection_interval_minutes
-        self._last_detection_time: Optional[datetime] = None
-        self._monitoring_thread: Optional[threading.Thread] = None
+        self._last_detection_time: datetime | None = None
+        self._monitoring_thread: threading.Thread | None = None
         self._stop_monitoring = False
 
     def start_monitoring(self) -> None:
@@ -69,7 +68,7 @@ class SmartAlertManager(AlertManager):
                     self._run_detection_cycle()
                 except Exception as e:
                     logger.error("Detection cycle failed: %s", e)
-                
+
                 # Sleep in small increments to allow quick shutdown
                 for _ in range(self.detection_interval * 60):
                     if self._stop_monitoring:
@@ -112,7 +111,7 @@ class SmartAlertManager(AlertManager):
                 self._create_smart_alert(anomaly)
 
             self._last_detection_time = now
-            
+
             if anomalies:
                 logger.warning("Detected %d anomalies", len(anomalies))
             else:
@@ -121,7 +120,7 @@ class SmartAlertManager(AlertManager):
             logger.error("Detection cycle failed: %s", e, exc_info=True)
             self._last_detection_time = datetime.now(timezone.utc)
 
-    def _create_smart_alert(self, anomaly: Dict[str, Any]) -> None:
+    def _create_smart_alert(self, anomaly: dict[str, Any]) -> None:
         """
         Create an alert from anomaly detection results.
         
@@ -140,7 +139,7 @@ class SmartAlertManager(AlertManager):
                 f"严重程度: {anomaly['severity'].value.upper()}"
             )
             threshold_value = anomaly.get('deviation_score', 0)
-            
+
         elif anomaly['type'] == 'multivariate':
             rule_name = "ml-anomaly-multivariate"
             features = anomaly['features']
@@ -183,13 +182,13 @@ class SmartAlertManager(AlertManager):
         )
 
         self._alerts.append(alert)
-        
+
         # Send notifications
         self._send_notifications(alert)
-        
+
         logger.warning("Alert created: %s (%s)", rule_name, anomaly['severity'].value)
 
-    def get_ml_alert_statistics(self) -> Dict[str, Any]:
+    def get_ml_alert_statistics(self) -> dict[str, Any]:
         """
         Get statistics specific to ML-detected alerts.
         
@@ -203,11 +202,11 @@ class SmartAlertManager(AlertManager):
 
         by_type = {}
         by_metric = {}
-        
+
         for alert in ml_alerts:
             anomaly_type = alert.rule.metadata.get('anomaly_type', 'unknown')
             by_type[anomaly_type] = by_type.get(anomaly_type, 0) + 1
-            
+
             if anomaly_type == 'univariate':
                 metric = alert.context.get('metric', 'unknown')
                 by_metric[metric] = by_metric.get(metric, 0) + 1

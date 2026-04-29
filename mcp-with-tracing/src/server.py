@@ -2,9 +2,7 @@
 MCP Server entry point.
 """
 
-import asyncio
 import logging
-from typing import Optional
 
 from fastmcp import FastMCP
 
@@ -13,15 +11,15 @@ from src.observability import (
     init_observability,
     observe_tool,
 )
+from src.observability.alert_config_loader import load_alert_rules
+from src.observability.alert_monitor import start_alert_monitor
 from src.observability.feedback import (
     record_acceptance,
     record_comment,
-    record_rejection,
     record_rating,
+    record_rejection,
 )
 from src.observability.session import get_session_id
-from src.observability.alert_config_loader import load_alert_rules
-from src.observability.alert_monitor import start_alert_monitor
 from src.observability.smart_alerting import SmartAlertManager
 
 logger = logging.getLogger(__name__)
@@ -38,7 +36,7 @@ mcp = FastMCP("MCP Langfuse Observability Server")
 @observe_tool(name="submit_feedback_accept")
 def submit_feedback_accept(
     trace_id: str,
-    comment: Optional[str] = None,
+    comment: str | None = None,
 ) -> dict:
     """
     Submit positive feedback (accept) for a response.
@@ -67,8 +65,8 @@ def submit_feedback_accept(
 @observe_tool(name="submit_feedback_reject")
 def submit_feedback_reject(
     trace_id: str,
-    reason: Optional[str] = None,
-    comment: Optional[str] = None,
+    reason: str | None = None,
+    comment: str | None = None,
 ) -> dict:
     """
     Submit negative feedback (reject) for a response.
@@ -100,7 +98,7 @@ def submit_feedback_reject(
 def submit_feedback_rating(
     trace_id: str,
     rating: int,
-    comment: Optional[str] = None,
+    comment: str | None = None,
 ) -> dict:
     """
     Submit a rating (1-5) for a response.

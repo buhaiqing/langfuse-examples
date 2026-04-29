@@ -2,14 +2,13 @@
 Tests for session management.
 """
 
-import pytest
 
 from src.observability.session import (
     SessionManager,
+    clear_session,
     get_session_id,
     get_user_id,
     set_session,
-    clear_session,
 )
 
 

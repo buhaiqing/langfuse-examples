@@ -5,17 +5,15 @@ Tests version registration, switching, and metadata injection.
 """
 
 import pytest
-from src.observability.config import ObservabilityConfig
+
+from src.observability.langfuse_client import get_observer
 from src.observability.prompt_versioning import (
-    PromptVersionManager,
+    get_active_prompt_version,
+    get_prompt_version_manager,
+    get_prompt_version_metadata,
     register_prompt_version,
     set_active_prompt_version,
-    get_active_prompt_version,
-    get_prompt_version_metadata,
-    get_prompt_version_manager,
 )
-from src.observability.langfuse_client import init_observer, get_observer
-from src.observability.session import clear_session
 
 
 @pytest.mark.integration

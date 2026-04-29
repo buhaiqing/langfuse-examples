@@ -4,11 +4,12 @@ Alert configuration loader tests.
 Tests cover YAML config loading, rule validation, and error handling.
 """
 
-import pytest
-import yaml
 import tempfile
 from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, patch
+
+import pytest
+import yaml
 
 from src.observability.alert_config_loader import (
     AlertConfigLoader,
@@ -16,9 +17,8 @@ from src.observability.alert_config_loader import (
     validate_alert_config,
 )
 from src.observability.alerting import (
-    AlertRule,
-    AlertSeverity,
     AlertChannel,
+    AlertSeverity,
 )
 
 
@@ -54,16 +54,16 @@ class TestAlertConfigLoader:
                 }
             ]
         }
-        
+
         config_path = self.create_temp_config(config)
-        
+
         try:
             loader = AlertConfigLoader()
             count = loader.load_and_register(config_path)
-            
+
             assert count == 1
             mock_manager.register_rule.assert_called_once()
-            
+
             # Verify the registered rule
             registered_rule = mock_manager.register_rule.call_args[0][0]
             assert registered_rule.name == 'test-rule'
@@ -93,9 +93,9 @@ class TestAlertConfigLoader:
                 },
             ]
         }
-        
+
         config_path = self.create_temp_config(config)
-        
+
         try:
             loader = AlertConfigLoader()
             count = loader.load_and_register(config_path)
@@ -118,13 +118,13 @@ class TestAlertConfigLoader:
                 }
             ]
         }
-        
+
         config_path = self.create_temp_config(config)
-        
+
         try:
             loader = AlertConfigLoader()
             loader.load_and_register(config_path)
-            
+
             rule = mock_manager.register_rule.call_args[0][0]
             assert len(rule.channels) == 2
             assert AlertChannel.WEBHOOK in rule.channels
@@ -146,9 +146,9 @@ class TestAlertConfigLoader:
                 }
             ]
         }
-        
+
         config_path = self.create_temp_config(config)
-        
+
         try:
             loader = AlertConfigLoader()
             count = loader.load_and_register(config_path)
@@ -170,14 +170,14 @@ class TestAlertConfigLoader:
                 }
             ]
         }
-        
+
         config_path = self.create_temp_config(config)
-        
+
         try:
             with patch('src.observability.alert_config_loader.get_alert_manager') as mock_get:
                 mock_manager = MagicMock()
                 mock_get.return_value = mock_manager
-                
+
                 loader = AlertConfigLoader()
                 with pytest.raises(ValueError, match="Missing required field"):
                     loader.load_and_register(config_path)
@@ -197,14 +197,14 @@ class TestAlertConfigLoader:
                 }
             ]
         }
-        
+
         config_path = self.create_temp_config(config)
-        
+
         try:
             with patch('src.observability.alert_config_loader.get_alert_manager') as mock_get:
                 mock_manager = MagicMock()
                 mock_get.return_value = mock_manager
-                
+
                 loader = AlertConfigLoader()
                 with pytest.raises(ValueError, match="Invalid operator"):
                     loader.load_and_register(config_path)
@@ -224,14 +224,14 @@ class TestAlertConfigLoader:
                 }
             ]
         }
-        
+
         config_path = self.create_temp_config(config)
-        
+
         try:
             with patch('src.observability.alert_config_loader.get_alert_manager') as mock_get:
                 mock_manager = MagicMock()
                 mock_get.return_value = mock_manager
-                
+
                 loader = AlertConfigLoader()
                 with pytest.raises(ValueError, match="Invalid severity"):
                     loader.load_and_register(config_path)
@@ -251,14 +251,14 @@ class TestAlertConfigLoader:
                 }
             ]
         }
-        
+
         config_path = self.create_temp_config(config)
-        
+
         try:
             with patch('src.observability.alert_config_loader.get_alert_manager') as mock_get:
                 mock_manager = MagicMock()
                 mock_get.return_value = mock_manager
-                
+
                 loader = AlertConfigLoader()
                 with pytest.raises(ValueError, match="Threshold must be a number"):
                     loader.load_and_register(config_path)
@@ -269,7 +269,7 @@ class TestAlertConfigLoader:
         """Test loading with empty alerts list."""
         config = {'alerts': []}
         config_path = self.create_temp_config(config)
-        
+
         try:
             loader = AlertConfigLoader()
             count = loader.load_and_register(config_path)
@@ -294,14 +294,14 @@ class TestValidateAlertConfig:
                 }
             ]
         }
-        
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             yaml.dump(config, f)
             config_path = f.name
-        
+
         try:
             result = validate_alert_config(config_path)
-            
+
             assert result['valid'] is True
             assert len(result['errors']) == 0
             assert result['rules_count'] == 1
@@ -312,7 +312,7 @@ class TestValidateAlertConfig:
     def test_validate_file_not_found(self):
         """Test validation when file doesn't exist."""
         result = validate_alert_config("/nonexistent/config.yaml")
-        
+
         assert result['valid'] is False
         assert len(result['errors']) > 0
 
@@ -336,14 +336,14 @@ class TestValidateAlertConfig:
                 },
             ]
         }
-        
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             yaml.dump(config, f)
             config_path = f.name
-        
+
         try:
             result = validate_alert_config(config_path)
-            
+
             assert result['valid'] is False
             assert any("Duplicate" in err for err in result['errors'])
         finally:
@@ -371,14 +371,14 @@ class TestValidateAlertConfig:
                 },
             ]
         }
-        
+
         with tempfile.NamedTemporaryFile(mode='w', suffix='.yaml', delete=False) as f:
             yaml.dump(config, f)
             config_path = f.name
-        
+
         try:
             result = validate_alert_config(config_path)
-            
+
             assert result['rules_count'] == 2
             assert result['enabled_rules'] == 1
             assert result['disabled_rules'] == 1
@@ -395,9 +395,9 @@ class TestLoadAlertRules:
         mock_loader = MagicMock()
         mock_loader.load_and_register.return_value = 5
         mock_loader_class.return_value = mock_loader
-        
+
         result = load_alert_rules("/path/to/config.yaml")
-        
+
         assert result == 5
         mock_loader_class.assert_called_once_with("/path/to/config.yaml")
         mock_loader.load_and_register.assert_called_once()

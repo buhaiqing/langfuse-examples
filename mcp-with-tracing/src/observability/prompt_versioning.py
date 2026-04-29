@@ -5,9 +5,9 @@ Provides prompt version registration, tracking, and comparison.
 """
 
 import logging
-from typing import Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -18,7 +18,7 @@ class PromptVersion:
 
     prompt_id: str
     version: str
-    description: Optional[str] = None
+    description: str | None = None
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -39,8 +39,8 @@ class PromptVersionManager:
         self,
         prompt_id: str,
         version: str,
-        description: Optional[str] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        description: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> PromptVersion:
         """
         Register a new prompt version.
@@ -72,7 +72,7 @@ class PromptVersionManager:
         logger.info("Registered prompt version: %s@%s", prompt_id, version)
         return prompt_version
 
-    def get_version(self, prompt_id: str, version: str) -> Optional[PromptVersion]:
+    def get_version(self, prompt_id: str, version: str) -> PromptVersion | None:
         """
         Get a specific prompt version.
 
@@ -118,7 +118,7 @@ class PromptVersionManager:
 
         return False
 
-    def get_active_version(self, prompt_id: str) -> Optional[str]:
+    def get_active_version(self, prompt_id: str) -> str | None:
         """Get the active version for a prompt."""
         return self._active_versions.get(prompt_id)
 
@@ -143,7 +143,7 @@ class PromptVersionManager:
         return len(self._versions.get(prompt_id, [])) > 1
 
 
-_prompt_version_manager: Optional[PromptVersionManager] = None
+_prompt_version_manager: PromptVersionManager | None = None
 
 
 def get_prompt_version_manager() -> PromptVersionManager:
@@ -157,8 +157,8 @@ def get_prompt_version_manager() -> PromptVersionManager:
 def register_prompt_version(
     prompt_id: str,
     version: str,
-    description: Optional[str] = None,
-    metadata: Optional[dict[str, Any]] = None,
+    description: str | None = None,
+    metadata: dict[str, Any] | None = None,
 ) -> PromptVersion:
     """Register a new prompt version."""
     return get_prompt_version_manager().register_version(prompt_id, version, description, metadata)
@@ -169,7 +169,7 @@ def set_active_prompt_version(prompt_id: str, version: str) -> bool:
     return get_prompt_version_manager().set_active_version(prompt_id, version)
 
 
-def get_active_prompt_version(prompt_id: str) -> Optional[str]:
+def get_active_prompt_version(prompt_id: str) -> str | None:
     """Get active version for a prompt."""
     return get_prompt_version_manager().get_active_version(prompt_id)
 

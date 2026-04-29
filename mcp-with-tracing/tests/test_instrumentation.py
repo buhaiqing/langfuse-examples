@@ -18,8 +18,8 @@ from src.observability.instrumentation import (
 )
 from src.observability.session import (
     SessionManager,
-    set_session,
     clear_session,
+    set_session,
 )
 
 

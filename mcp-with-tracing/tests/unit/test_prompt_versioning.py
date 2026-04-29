@@ -2,15 +2,14 @@
 Tests for prompt versioning.
 """
 
-import pytest
 
 from src.observability.prompt_versioning import (
     PromptVersionManager,
+    get_active_prompt_version,
     get_prompt_version_manager,
+    get_prompt_version_metadata,
     register_prompt_version,
     set_active_prompt_version,
-    get_active_prompt_version,
-    get_prompt_version_metadata,
 )
 
 

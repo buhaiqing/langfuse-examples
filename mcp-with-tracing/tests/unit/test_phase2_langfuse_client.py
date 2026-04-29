@@ -7,13 +7,14 @@ Tests for:
 - Error handling and edge cases
 """
 
-import pytest
-from unittest.mock import Mock, MagicMock, patch
-from datetime import datetime, timezone
+from datetime import datetime
+from unittest.mock import MagicMock, Mock, patch
 
-from src.observability.langfuse_client import LangfuseObserver, get_observer, init_observer
-from src.observability.session import set_session, clear_session, SessionManager
+import pytest
+
 from src.observability.config import ObservabilityConfig
+from src.observability.langfuse_client import LangfuseObserver, get_observer, init_observer
+from src.observability.session import SessionManager, clear_session, set_session
 
 
 class TestLangfuseObserverSessionIntegration:

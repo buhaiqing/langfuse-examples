@@ -9,17 +9,17 @@ Tests cover:
 """
 
 import asyncio
-import time
+
 import pytest
+
+from src.observability.langfuse_client import get_observer
 from src.observability.session import (
     SessionManager,
-    set_session,
+    clear_session,
     get_session_id,
     get_user_id,
-    clear_session,
+    set_session,
 )
-from src.observability.langfuse_client import get_observer, init_observer
-from src.observability.config import ObservabilityConfig
 
 
 @pytest.mark.integration

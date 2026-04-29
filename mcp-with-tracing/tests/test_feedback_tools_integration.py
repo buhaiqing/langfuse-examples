@@ -4,8 +4,9 @@ Integration tests for MCP feedback tools.
 Tests the integration of feedback tools with the main MCP server.
 """
 
-import pytest
 from unittest.mock import Mock, patch
+
+import pytest
 
 from src.server import mcp
 
@@ -14,14 +15,14 @@ from src.server import mcp
 def get_tool_function(tool_name: str):
     """Extract the original function from a registered tool."""
     import asyncio
-    
+
     async def _get():
         tools = await mcp._tool_manager.list_tools()
         for tool in tools:
             if tool.name == tool_name:
                 return tool.fn
         return None
-    
+
     return asyncio.run(_get())
 
 
@@ -59,7 +60,7 @@ class TestFeedbackToolsIntegration:
     async def test_total_tool_count(self):
         """Test that server has expected number of tools."""
         tools = await mcp._tool_manager.list_tools()
-        
+
         # Should have: 4 feedback tools = 4 total
         assert len(tools) == 4
 
@@ -71,7 +72,7 @@ class TestFeedbackToolFunctions:
         """Setup test fixtures."""
         self.test_trace_id = "test-trace-123"
         self.test_user_id = "test-user-456"
-        
+
         # Get original functions from registered tools
         self.submit_feedback_accept = get_tool_function("submit_feedback_accept")
         self.submit_feedback_reject = get_tool_function("submit_feedback_reject")
@@ -196,7 +197,7 @@ class TestFeedbackToolObservability:
         # All feedback tools should be registered in the MCP server
         tools = await mcp._tool_manager.list_tools()
         tool_names = [tool.name for tool in tools]
-        
+
         # Verify all feedback tools are registered
         assert "submit_feedback_accept" in tool_names
         assert "submit_feedback_reject" in tool_names
@@ -208,7 +209,7 @@ class TestFeedbackToolObservability:
         """Test that tools have correct names for tracing."""
         tools = await mcp._tool_manager.list_tools()
         tools_dict = {tool.name: tool for tool in tools}
-        
+
         # Verify tool names match expected span names
         assert "submit_feedback_accept" in tools_dict
         assert "submit_feedback_reject" in tools_dict
@@ -223,7 +224,7 @@ class TestFeedbackToolEdgeCases:
         """Setup test fixtures."""
         self.test_trace_id = "test-trace-123"
         self.test_user_id = "test-user-456"
-        
+
         # Get original functions from registered tools
         self.submit_feedback_accept = get_tool_function("submit_feedback_accept")
         self.submit_feedback_reject = get_tool_function("submit_feedback_reject")

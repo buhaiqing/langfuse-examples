@@ -2,13 +2,13 @@
 Integration tests for feedback collection and Langfuse integration.
 """
 
+from unittest.mock import Mock, patch
+
 import pytest
-from unittest.mock import Mock, patch, MagicMock
 
 from src.observability.feedback import (
-    FeedbackType,
     FeedbackCollector,
-    get_feedback_collector,
+    FeedbackType,
 )
 from src.observability.langfuse_client import LangfuseObserver
 

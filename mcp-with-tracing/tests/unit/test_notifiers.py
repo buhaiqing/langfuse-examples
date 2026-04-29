@@ -4,23 +4,24 @@ Notification channels tests for MCP Langfuse Observability.
 Tests cover WeCom, Slack, Email, PagerDuty, and Webhook notifiers.
 """
 
-import pytest
-import logging
-from unittest.mock import Mock, patch, MagicMock
 import json
+import logging
 from datetime import datetime, timezone
+from unittest.mock import patch
+
+import pytest
 
 from src.observability.alerting import (
-    AlertRule,
     Alert,
+    AlertRule,
     AlertSeverity,
 )
 from src.observability.notifiers import (
-    WeComNotifier,
-    SlackNotifier,
     EmailNotifier,
     PagerDutyNotifier,
+    SlackNotifier,
     WebhookNotifier,
+    WeComNotifier,
 )
 
 
@@ -58,14 +59,14 @@ class TestWeComNotifier:
         """Test sending a warning alert to WeCom."""
         webhook_url = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test"
         notifier = WeComNotifier(webhook_url)
-        
+
         notifier(sample_alert)
-        
+
         # Verify the request was made
         assert mock_urlopen.called
         call_args = mock_urlopen.call_args
         request = call_args[0][0]
-        
+
         # Verify it's a POST request with JSON
         assert request.data is not None
         payload = json.loads(request.data.decode("utf-8"))
@@ -91,11 +92,11 @@ class TestWeComNotifier:
             value=600,
             message="Critical alert triggered",
         )
-        
+
         webhook_url = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test"
         notifier = WeComNotifier(webhook_url)
         notifier(alert)
-        
+
         assert mock_urlopen.called
         call_args = mock_urlopen.call_args
         request = call_args[0][0]
@@ -118,11 +119,11 @@ class TestWeComNotifier:
             value=150,
             message="Info alert",
         )
-        
+
         webhook_url = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test"
         notifier = WeComNotifier(webhook_url)
         notifier(alert)
-        
+
         assert mock_urlopen.called
         call_args = mock_urlopen.call_args
         request = call_args[0][0]
@@ -134,10 +135,10 @@ class TestWeComNotifier:
         """Test that WeCom notifier handles exceptions gracefully."""
         webhook_url = "https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=test"
         notifier = WeComNotifier(webhook_url)
-        
+
         with caplog.at_level(logging.ERROR, logger="src.observability.notifiers"):
             notifier(sample_alert)
-        
+
         assert "Failed to send WeCom notification" in caplog.text
 
 
@@ -155,19 +156,19 @@ class TestSlackNotifier:
         """Test sending a warning alert to Slack."""
         webhook_url = "https://hooks.slack.com/services/test"
         notifier = SlackNotifier(webhook_url)
-        
+
         notifier(sample_alert)
-        
+
         assert mock_urlopen.called
         call_args = mock_urlopen.call_args
         request = call_args[0][0]
         payload = json.loads(request.data.decode("utf-8"))
-        
+
         assert "text" in payload
         assert "WARNING" in payload["text"]
         assert "attachments" in payload
         assert len(payload["attachments"]) > 0
-        
+
         attachment = payload["attachments"][0]
         assert attachment["color"] == "warning"
 
@@ -187,16 +188,16 @@ class TestSlackNotifier:
             value=600,
             message="Critical alert",
         )
-        
+
         webhook_url = "https://hooks.slack.com/services/test"
         notifier = SlackNotifier(webhook_url)
         notifier(alert)
-        
+
         assert mock_urlopen.called
         call_args = mock_urlopen.call_args
         request = call_args[0][0]
         payload = json.loads(request.data.decode("utf-8"))
-        
+
         attachment = payload["attachments"][0]
         assert attachment["color"] == "danger"
 
@@ -216,16 +217,16 @@ class TestSlackNotifier:
             value=150,
             message="Info alert",
         )
-        
+
         webhook_url = "https://hooks.slack.com/services/test"
         notifier = SlackNotifier(webhook_url)
         notifier(alert)
-        
+
         assert mock_urlopen.called
         call_args = mock_urlopen.call_args
         request = call_args[0][0]
         payload = json.loads(request.data.decode("utf-8"))
-        
+
         attachment = payload["attachments"][0]
         assert attachment["color"] == "good"
 
@@ -234,10 +235,10 @@ class TestSlackNotifier:
         """Test that Slack notifier handles exceptions gracefully."""
         webhook_url = "https://hooks.slack.com/services/test"
         notifier = SlackNotifier(webhook_url)
-        
+
         with caplog.at_level(logging.ERROR, logger="src.observability.notifiers"):
             notifier(sample_alert)
-        
+
         assert "Failed to send Slack notification" in caplog.text
 
 
@@ -266,9 +267,9 @@ class TestEmailNotifier:
             sender="alerts@example.com",
             recipients=["admin@example.com"],
         )
-        
+
         notifier(sample_alert)
-        
+
         # Verify SMTP was used
         assert mock_smtp.called
         mock_smtp_instance = mock_smtp.return_value.__enter__.return_value
@@ -283,10 +284,10 @@ class TestEmailNotifier:
             sender="alerts@example.com",
             recipients=["admin@example.com"],
         )
-        
+
         with caplog.at_level(logging.ERROR, logger="src.observability.notifiers"):
             notifier(sample_alert)
-        
+
         assert "Failed to send email notification" in caplog.text
 
 
@@ -304,16 +305,16 @@ class TestPagerDutyNotifier:
         """Test sending an alert to PagerDuty."""
         routing_key = "test_routing_key"
         notifier = PagerDutyNotifier(routing_key)
-        
+
         notifier(sample_alert)
-        
+
         assert mock_urlopen.called
         call_args = mock_urlopen.call_args
         request = call_args[0][0]
-        
+
         # Verify URL
         assert request.full_url == "https://events.pagerduty.com/v2/enqueue"
-        
+
         # Verify payload
         payload = json.loads(request.data.decode("utf-8"))
         assert payload["routing_key"] == routing_key
@@ -326,10 +327,10 @@ class TestPagerDutyNotifier:
         """Test that PagerDuty notifier handles exceptions gracefully."""
         routing_key = "test_routing_key"
         notifier = PagerDutyNotifier(routing_key)
-        
+
         with caplog.at_level(logging.ERROR, logger="src.observability.notifiers"):
             notifier(sample_alert)
-        
+
         assert "Failed to send PagerDuty notification" in caplog.text
 
 
@@ -355,13 +356,13 @@ class TestWebhookNotifier:
         """Test sending an alert to webhook."""
         webhook_url = "https://example.com/webhook"
         notifier = WebhookNotifier(webhook_url)
-        
+
         notifier(sample_alert)
-        
+
         assert mock_urlopen.called
         call_args = mock_urlopen.call_args
         request = call_args[0][0]
-        
+
         # Verify payload
         payload = json.loads(request.data.decode("utf-8"))
         assert payload["alert_name"] == sample_alert.rule.name
@@ -376,10 +377,10 @@ class TestWebhookNotifier:
         """Test that Webhook notifier handles exceptions gracefully."""
         webhook_url = "https://example.com/webhook"
         notifier = WebhookNotifier(webhook_url)
-        
+
         with caplog.at_level(logging.ERROR, logger="src.observability.notifiers"):
             notifier(sample_alert)
-        
+
         assert "Failed to send webhook notification" in caplog.text
 
 
@@ -389,15 +390,15 @@ class TestNotifiersExport:
     def test_notifiers_function(self):
         """Test that notifiers() returns all notifier classes."""
         from src.observability.notifiers import notifiers
-        
+
         result = notifiers()
-        
+
         assert "WeComNotifier" in result
         assert "SlackNotifier" in result
         assert "EmailNotifier" in result
         assert "PagerDutyNotifier" in result
         assert "WebhookNotifier" in result
-        
+
         # Verify they are classes
         assert callable(result["WeComNotifier"])
         assert callable(result["SlackNotifier"])

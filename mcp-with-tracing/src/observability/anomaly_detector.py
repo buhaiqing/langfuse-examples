@@ -6,8 +6,9 @@ anomaly detection with PyOD (Isolation Forest, LOF).
 """
 
 import logging
-from typing import Dict, Any, List, Optional, Set
 from datetime import datetime, timezone
+from typing import Any
+
 import numpy as np
 import pandas as pd
 from prophet import Prophet
@@ -37,7 +38,7 @@ class TimeSeriesAnomalyDetector:
             uncertainty_samples: Number of samples for uncertainty estimation.
         """
         self.uncertainty_samples = uncertainty_samples
-        self._models: Dict[str, Prophet] = {}
+        self._models: dict[str, Prophet] = {}
 
     def train(self, metric_name: str, historical_data: pd.DataFrame) -> None:
         """
@@ -69,8 +70,8 @@ class TimeSeriesAnomalyDetector:
         self,
         metric_name: str,
         current_value: float,
-        timestamp: Optional[datetime] = None
-    ) -> Dict[str, Any]:
+        timestamp: datetime | None = None
+    ) -> dict[str, Any]:
         """
         Detect if the current value is anomalous.
         
@@ -190,7 +191,7 @@ class MultivariateAnomalyDetector:
         self._detector.fit(scaled_data)
         self._is_fitted = True
 
-    def detect(self, current_features: np.ndarray) -> Dict[str, Any]:
+    def detect(self, current_features: np.ndarray) -> dict[str, Any]:
         """
         Detect if the current feature vector is anomalous.
         
@@ -248,7 +249,7 @@ class AnomalyDetector:
         self.metrics_collector = metrics_collector
         self.ts_detector = TimeSeriesAnomalyDetector()
         self.mv_detector = MultivariateAnomalyDetector(method='iforest')
-        self._trained_metrics: Set[str] = set()
+        self._trained_metrics: set[str] = set()
 
     def train_all_models(self, hours_of_history: int = 24) -> None:
         """
@@ -261,20 +262,20 @@ class AnomalyDetector:
 
         # Train time series models for each metric
         metrics = ['success_rate', 'latency_p95', 'request_rate']
-        
+
         for metric in metrics:
             try:
                 historical_data = self.metrics_collector.get_historical_data(
                     metric, hours=hours_of_history
                 )
-                
+
                 if len(historical_data) >= 50:
                     self.ts_detector.train(metric, historical_data)
                     self._trained_metrics.add(metric)
                     logger.info("Trained model for %s (%d data points)", metric, len(historical_data))
                 else:
                     logger.warning("Insufficient data for %s (%d points)", metric, len(historical_data))
-                    
+
             except Exception as e:
                 logger.error("Failed to train model for %s: %s", metric, e)
 
@@ -289,7 +290,7 @@ class AnomalyDetector:
         except Exception as e:
             logger.error("Failed to train multivariate model: %s", e)
 
-    def detect_anomalies(self) -> List[Dict[str, Any]]:
+    def detect_anomalies(self) -> list[dict[str, Any]]:
         """
         Execute anomaly detection across all metrics.
         
@@ -328,7 +329,7 @@ class AnomalyDetector:
                         'success_rate': float(current_features[0][0]),
                         'latency_p95': float(current_features[0][1]),
                         'request_rate': float(current_features[0][2]),
-                        'satisfaction': float(current_features[0][3]) 
+                        'satisfaction': float(current_features[0][3])
                                        if current_features[0][3] >= 0 else 0.0,
                     },
                     **mv_result
@@ -354,7 +355,7 @@ class AnomalyDetector:
         # Collect historical data for all metrics
         metrics = ['success_rate', 'latency_p95', 'request_rate']
         dataframes = {}
-        
+
         for metric in metrics:
             df = self.metrics_collector.get_historical_data(
                 metric, hours=hours
@@ -368,7 +369,7 @@ class AnomalyDetector:
         # Align timestamps and create feature matrix
         # For simplicity, use the shortest dataframe's length
         min_length = min(len(df) for df in dataframes.values())
-        
+
         features = []
         for i in range(min_length):
             row = []
@@ -377,11 +378,11 @@ class AnomalyDetector:
                     row.append(dataframes[metric].iloc[i]['y'])
                 else:
                     row.append(0.0)
-            
+
             # Add satisfaction (may be None)
             satisfaction = self.metrics_collector.collect_avg_satisfaction()
             row.append(satisfaction if satisfaction is not None else 0.0)
-            
+
             features.append(row)
 
         return np.array(features)
@@ -413,7 +414,7 @@ class AnomalyDetector:
             Feature vector of shape (1, 4).
         """
         satisfaction = self.metrics_collector.collect_avg_satisfaction()
-        
+
         return np.array([[
             self.metrics_collector.collect_success_rate(),
             self.metrics_collector.collect_latency_p95(),

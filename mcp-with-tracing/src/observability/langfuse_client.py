@@ -6,15 +6,16 @@ instead of creating a separate instance.
 """
 
 import logging
-from typing import Any, Optional
 from contextlib import contextmanager
 from datetime import datetime, timezone
+from typing import Any
 
 from langfuse import Langfuse
+
 from src.observability.config import ObservabilityConfig
+from src.observability.feedback import FeedbackType
 from src.observability.instrumentation import get_langfuse_client
 from src.observability.session import SessionManager
-from src.observability.feedback import FeedbackType
 
 logger = logging.getLogger(__name__)
 
@@ -26,9 +27,9 @@ class LangfuseObserver:
     to ensure all modules use the same client instance.
     """
 
-    def __init__(self, config: Optional[ObservabilityConfig] = None):
-        self.config: Optional[ObservabilityConfig] = config
-        self._own_client: Optional[Langfuse] = None
+    def __init__(self, config: ObservabilityConfig | None = None):
+        self.config: ObservabilityConfig | None = config
+        self._own_client: Langfuse | None = None
 
         if config is not None and config.enabled and config.is_configured():
             self._own_client = Langfuse(
@@ -39,7 +40,7 @@ class LangfuseObserver:
             logger.info("LangfuseObserver initialized with dedicated client (host=%s)", config.langfuse_host)
 
     @property
-    def client(self) -> Optional[Langfuse]:
+    def client(self) -> Langfuse | None:
         """Get the Langfuse client.
 
         Priority:
@@ -58,10 +59,10 @@ class LangfuseObserver:
         self,
         tool_name: str,
         input_args: dict[str, Any],
-        session_id: Optional[str] = None,
-        user_id: Optional[str] = None,
-        prompt_version: Optional[str] = None,
-        prompt_id: Optional[str] = None,
+        session_id: str | None = None,
+        user_id: str | None = None,
+        prompt_version: str | None = None,
+        prompt_id: str | None = None,
     ):
         """Context manager for tracing a tool call.
 
@@ -144,8 +145,8 @@ class LangfuseObserver:
         trace_id: str,
         name: str,
         value: float | int,
-        comment: Optional[str] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        comment: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Score a trace with feedback.
 
@@ -180,9 +181,9 @@ class LangfuseObserver:
         trace_id: str,
         feedback_type: FeedbackType,
         value: Any,
-        user_id: Optional[str] = None,
-        comment: Optional[str] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        user_id: str | None = None,
+        comment: str | None = None,
+        metadata: dict[str, Any] | None = None,
     ) -> None:
         """Record feedback to Langfuse as a score.
 
@@ -229,7 +230,7 @@ class LangfuseObserver:
         )
 
 
-_observer: Optional[LangfuseObserver] = None
+_observer: LangfuseObserver | None = None
 
 
 def get_observer() -> LangfuseObserver:
@@ -243,7 +244,7 @@ def get_observer() -> LangfuseObserver:
     return _observer
 
 
-def init_observer(config: Optional[ObservabilityConfig] = None) -> LangfuseObserver:
+def init_observer(config: ObservabilityConfig | None = None) -> LangfuseObserver:
     """Initialize the global observer with an optional config.
 
     If config is provided and valid, the observer will use a dedicated

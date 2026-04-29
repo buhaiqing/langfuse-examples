@@ -7,11 +7,12 @@ Tests for:
 - Integration with session context propagation
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import MagicMock, Mock, patch
 
-from src.observability.decorators import observe_tool, track_session, track_prompt_version
-from src.observability.session import set_session, clear_session, SessionManager
+import pytest
+
+from src.observability.decorators import observe_tool, track_prompt_version, track_session
+from src.observability.session import SessionManager, clear_session, set_session
 
 
 class TestObserveToolDecorator:

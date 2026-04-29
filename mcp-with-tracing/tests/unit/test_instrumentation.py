@@ -2,23 +2,24 @@
 Tests for observability instrumentation.
 """
 
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock
 
 from src.observability.config import ObservabilityConfig
+from src.observability.decorators import (
+    observe_tool,
+    track_prompt_version,
+    track_session,
+)
 from src.observability.instrumentation import (
-    init_observability,
     get_langfuse_client,
+    init_observability,
 )
 from src.observability.session import (
     SessionManager,
-    set_session,
     clear_session,
-)
-from src.observability.decorators import (
-    observe_tool,
-    track_session,
-    track_prompt_version,
+    set_session,
 )
 
 

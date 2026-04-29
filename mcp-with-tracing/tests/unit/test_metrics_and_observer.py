@@ -8,12 +8,12 @@ Covers:
 - LangfuseObserver.trace_tool_call creates real trace+span
 """
 
-import pytest
-from unittest.mock import Mock, patch, MagicMock
-from datetime import datetime, timezone
+from unittest.mock import MagicMock, Mock, patch
 
-from src.observability.metrics_collector import MetricsCollector, MetricPoint
+import pytest
+
 from src.observability.langfuse_client import LangfuseObserver, get_observer, init_observer
+from src.observability.metrics_collector import MetricsCollector
 from src.observability.session import clear_session
 
 

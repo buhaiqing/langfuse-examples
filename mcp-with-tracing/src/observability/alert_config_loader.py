@@ -6,15 +6,14 @@ Supports environment-specific overrides via environment variables.
 """
 
 import logging
-import os
-import yaml
 from pathlib import Path
-from typing import Optional
+
+import yaml
+
 from src.observability.alerting import (
-    AlertManager,
+    AlertChannel,
     AlertRule,
     AlertSeverity,
-    AlertChannel,
     get_alert_manager,
 )
 
@@ -47,7 +46,7 @@ class AlertConfigLoader:
         loader.load_and_register("config/alerts.yaml")
     """
 
-    def __init__(self, config_path: Optional[str] = None):
+    def __init__(self, config_path: str | None = None):
         """
         Initialize the alert config loader.
         
@@ -60,11 +59,11 @@ class AlertConfigLoader:
             self.config_path = project_root / "config" / "alerts.yaml"
         else:
             self.config_path = Path(config_path)
-        
+
         self._manager = get_alert_manager()
         self._loaded_rules = []
 
-    def load_and_register(self, config_path: Optional[str] = None) -> int:
+    def load_and_register(self, config_path: str | None = None) -> int:
         """
         Load alert rules from YAML and register them with AlertManager.
         
@@ -75,23 +74,23 @@ class AlertConfigLoader:
             Number of rules successfully registered.
         """
         path = Path(config_path) if config_path else self.config_path
-        
+
         if not path.exists():
             logger.warning("Alert config file not found: %s", path)
             logger.info("No alert rules will be loaded.")
             return 0
-        
+
         try:
-            with open(path, 'r', encoding='utf-8') as f:
+            with open(path, encoding='utf-8') as f:
                 config = yaml.safe_load(f)
-            
+
             if not config or 'alerts' not in config:
                 logger.warning("No 'alerts' section found in %s", path)
                 return 0
-            
+
             alerts_config = config['alerts']
             registered_count = 0
-            
+
             for alert_cfg in alerts_config:
                 try:
                     rule = self._create_rule_from_config(alert_cfg)
@@ -107,10 +106,10 @@ class AlertConfigLoader:
                     raise
                 except Exception as e:
                     logger.error("Failed to register rule '%s': %s", alert_cfg.get('name', 'unknown'), e)
-            
+
             logger.info("Loaded %d alert rule(s) from %s", registered_count, path)
             return registered_count
-            
+
         except yaml.YAMLError as e:
             logger.error("Failed to parse alert config file: %s", e)
             raise
@@ -118,7 +117,7 @@ class AlertConfigLoader:
             logger.error("Failed to load alert config: %s", e)
             raise
 
-    def _create_rule_from_config(self, config: dict) -> Optional[AlertRule]:
+    def _create_rule_from_config(self, config: dict) -> AlertRule | None:
         """
         Create an AlertRule from configuration dictionary.
         
@@ -136,37 +135,37 @@ class AlertConfigLoader:
         for field in required_fields:
             if field not in config:
                 raise ValueError(f"Missing required field '{field}' in alert rule config")
-        
+
         # Validate rule name
         name = config['name']
         if not isinstance(name, str) or not name.strip():
             raise ValueError("Rule 'name' must be a non-empty string")
         if not name.replace('-', '').replace('_', '').isalnum():
             raise ValueError(f"Rule name '{name}' contains invalid characters. Use only alphanumeric, hyphens, and underscores")
-        
+
         # Validate metric
         metric = config['metric']
         if not isinstance(metric, str) or not metric.strip():
             raise ValueError("Metric must be a non-empty string")
-        
+
         # Validate threshold
         try:
             threshold = float(config['threshold'])
         except (TypeError, ValueError):
             raise ValueError(f"Threshold must be a number, got: {config['threshold']}")
-        
+
         # Validate operator
         operator = config['operator'].lower()
         valid_operators = ['gt', 'lt', 'gte', 'lte', 'eq']
         if operator not in valid_operators:
             raise ValueError(f"Invalid operator '{operator}'. Must be one of: {valid_operators}")
-        
+
         # Validate severity
         severity_str = config['severity'].lower()
         if severity_str not in SEVERITY_MAP:
             raise ValueError(f"Invalid severity '{severity_str}'. Must be one of: {list(SEVERITY_MAP.keys())}")
         severity = SEVERITY_MAP[severity_str]
-        
+
         # Validate window_minutes
         window_minutes = config.get('window_minutes', 60)
         try:
@@ -175,13 +174,13 @@ class AlertConfigLoader:
                 raise ValueError("window_minutes must be positive")
         except (TypeError, ValueError) as e:
             raise ValueError(f"Invalid window_minutes: {window_minutes}. Must be a positive integer") from e
-        
+
         # Validate channels
         channels = []
         channels_config = config.get('channels', [])
         if not isinstance(channels_config, list):
             raise ValueError(f"'channels' must be a list, got: {type(channels_config).__name__}")
-        
+
         for channel_name in channels_config:
             if not isinstance(channel_name, str):
                 raise ValueError(f"Channel name must be a string, got: {type(channel_name).__name__}")
@@ -190,17 +189,17 @@ class AlertConfigLoader:
                 channels.append(CHANNEL_MAP[channel_lower])
             else:
                 logger.warning("Unknown channel '%s', skipping. Valid channels: %s", channel_name, list(CHANNEL_MAP.keys()))
-        
+
         # Validate enabled
         enabled = config.get('enabled', True)
         if not isinstance(enabled, bool):
             raise ValueError(f"'enabled' must be a boolean, got: {type(enabled).__name__}")
-        
+
         # Validate metadata
         metadata = config.get('metadata', {})
         if not isinstance(metadata, dict):
             raise ValueError(f"'metadata' must be a dictionary, got: {type(metadata).__name__}")
-        
+
         # Create rule
         rule = AlertRule(
             name=name,
@@ -213,11 +212,11 @@ class AlertConfigLoader:
             enabled=enabled,
             metadata=metadata,
         )
-        
+
         # Add description to metadata if present
         if 'description' in config:
             rule.metadata['description'] = config['description']
-        
+
         return rule
 
     def get_loaded_rules(self) -> list[str]:
@@ -225,7 +224,7 @@ class AlertConfigLoader:
         return self._loaded_rules.copy()
 
 
-def load_alert_rules(config_path: Optional[str] = None) -> int:
+def load_alert_rules(config_path: str | None = None) -> int:
     """
     Convenience function to load alert rules from config.
     
@@ -239,7 +238,7 @@ def load_alert_rules(config_path: Optional[str] = None) -> int:
     return loader.load_and_register()
 
 
-def validate_alert_config(config_path: Optional[str] = None) -> dict:
+def validate_alert_config(config_path: str | None = None) -> dict:
     """
     Validate alert configuration file without loading it.
     
@@ -268,76 +267,76 @@ def validate_alert_config(config_path: Optional[str] = None) -> dict:
         'enabled_rules': 0,
         'disabled_rules': 0,
     }
-    
+
     path = Path(config_path) if config_path else Path(__file__).parent.parent.parent / "config" / "alerts.yaml"
-    
+
     if not path.exists():
         result['valid'] = False
         result['errors'].append(f"Configuration file not found: {path}")
         return result
-    
+
     try:
-        with open(path, 'r', encoding='utf-8') as f:
+        with open(path, encoding='utf-8') as f:
             config = yaml.safe_load(f)
     except yaml.YAMLError as e:
         result['valid'] = False
         result['errors'].append(f"YAML syntax error: {e}")
         return result
-    
+
     if not config or 'alerts' not in config:
         result['valid'] = False
         result['errors'].append("No 'alerts' section found in configuration")
         return result
-    
+
     alerts_config = config['alerts']
     if not isinstance(alerts_config, list):
         result['valid'] = False
         result['errors'].append(f"'alerts' must be a list, got: {type(alerts_config).__name__}")
         return result
-    
+
     result['rules_count'] = len(alerts_config)
-    
+
     # Validate each rule
     seen_names = set()
     for i, alert_cfg in enumerate(alerts_config):
         rule_num = i + 1
-        
+
         if not isinstance(alert_cfg, dict):
             result['errors'].append(f"Rule #{rule_num}: Must be a dictionary")
             result['valid'] = False
             continue
-        
+
         rule_name = alert_cfg.get('name', f'Rule #{rule_num}')
-        
+
         # Check for duplicate names
         if rule_name in seen_names:
             result['errors'].append(f"Rule '{rule_name}': Duplicate rule name")
             result['valid'] = False
         seen_names.add(rule_name)
-        
+
         # Try to create rule (will catch validation errors)
         try:
             loader = AlertConfigLoader()
             rule = loader._create_rule_from_config(alert_cfg)
-            
+
             if rule:
                 if rule.enabled:
                     result['enabled_rules'] += 1
                 else:
                     result['disabled_rules'] += 1
-                    
+
         except ValueError as e:
-            result['errors'].append(f"Rule '{rule_name}': {str(e)}")
+            result['errors'].append(f"Rule '{rule_name}': {e!s}")
             result['valid'] = False
         except Exception as e:
             result['errors'].append(f"Rule '{rule_name}': Unexpected error - {e}")
             result['valid'] = False
-    
+
     # Add warnings
     if result['rules_count'] == 0:
         result['warnings'].append("No rules defined in configuration")
-    
+
     if result['enabled_rules'] == 0 and result['rules_count'] > 0:
         result['warnings'].append("All rules are disabled")
-    
+
     return result

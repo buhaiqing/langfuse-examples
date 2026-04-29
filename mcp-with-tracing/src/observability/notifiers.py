@@ -4,11 +4,11 @@ Notification channel implementations for alerting.
 Implements WeCom (企业微信), Email, PagerDuty notification handlers.
 """
 
-import logging
-from typing import Optional
 import json
+import logging
 import urllib.request
-from src.observability.alerting import Alert, AlertChannel, AlertSeverity
+
+from src.observability.alerting import Alert, AlertSeverity
 
 logger = logging.getLogger(__name__)
 
@@ -209,7 +209,7 @@ class PagerDutyNotifier:
 class WebhookNotifier:
     """Generic webhook notification handler."""
 
-    def __init__(self, webhook_url: str, headers: Optional[dict[str, str]] = None):
+    def __init__(self, webhook_url: str, headers: dict[str, str] | None = None):
         self.webhook_url = webhook_url
         self.headers: dict[str, str] = headers or {"Content-Type": "application/json"}
 

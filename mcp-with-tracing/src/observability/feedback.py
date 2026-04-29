@@ -5,10 +5,10 @@ Provides user satisfaction signal collection, aggregation, and analysis.
 """
 
 import logging
-from typing import Any, Optional
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
 from enum import Enum
+from typing import Any
 
 logger = logging.getLogger(__name__)
 
@@ -28,9 +28,9 @@ class Feedback:
 
     trace_id: str
     feedback_type: FeedbackType
-    value: Optional[Any]
-    comment: Optional[str] = None
-    user_id: Optional[str] = None
+    value: Any | None
+    comment: str | None = None
+    user_id: str | None = None
     created_at: str = field(default_factory=lambda: datetime.now(timezone.utc).isoformat())
     metadata: dict[str, Any] = field(default_factory=dict)
 
@@ -49,9 +49,9 @@ class FeedbackCollector:
     def record_acceptance(
         self,
         trace_id: str,
-        user_id: Optional[str] = None,
-        comment: Optional[str] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        user_id: str | None = None,
+        comment: str | None = None,
+        metadata: dict[str, Any] | None = None,
         send_to_langfuse: bool = True,
     ) -> Feedback:
         """
@@ -98,10 +98,10 @@ class FeedbackCollector:
     def record_rejection(
         self,
         trace_id: str,
-        user_id: Optional[str] = None,
-        reason: Optional[str] = None,
-        comment: Optional[str] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        user_id: str | None = None,
+        reason: str | None = None,
+        comment: str | None = None,
+        metadata: dict[str, Any] | None = None,
         send_to_langfuse: bool = True,
     ) -> Feedback:
         """
@@ -154,10 +154,10 @@ class FeedbackCollector:
         self,
         trace_id: str,
         rating: int,
-        user_id: Optional[str] = None,
-        comment: Optional[str] = None,
+        user_id: str | None = None,
+        comment: str | None = None,
         scale: int = 5,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: dict[str, Any] | None = None,
         send_to_langfuse: bool = True,
     ) -> Feedback:
         """
@@ -210,8 +210,8 @@ class FeedbackCollector:
         self,
         trace_id: str,
         comment: str,
-        user_id: Optional[str] = None,
-        metadata: Optional[dict[str, Any]] = None,
+        user_id: str | None = None,
+        metadata: dict[str, Any] | None = None,
         send_to_langfuse: bool = True,
     ) -> Feedback:
         """
@@ -281,7 +281,7 @@ class FeedbackCollector:
         accepts = sum(1 for f in scored if f.feedback_type == FeedbackType.ACCEPT)
         return (accepts / len(scored)) * 100
 
-    def get_average_rating(self) -> Optional[float]:
+    def get_average_rating(self) -> float | None:
         """
         Calculate average rating.
 
@@ -328,7 +328,7 @@ class FeedbackCollector:
         return stats
 
 
-_feedback_collector: Optional[FeedbackCollector] = None
+_feedback_collector: FeedbackCollector | None = None
 
 
 def get_feedback_collector() -> FeedbackCollector:
@@ -341,8 +341,8 @@ def get_feedback_collector() -> FeedbackCollector:
 
 def record_acceptance(
     trace_id: str,
-    user_id: Optional[str] = None,
-    comment: Optional[str] = None,
+    user_id: str | None = None,
+    comment: str | None = None,
     send_to_langfuse: bool = True,
 ) -> Feedback:
     """Record acceptance feedback."""
@@ -351,9 +351,9 @@ def record_acceptance(
 
 def record_rejection(
     trace_id: str,
-    user_id: Optional[str] = None,
-    reason: Optional[str] = None,
-    comment: Optional[str] = None,
+    user_id: str | None = None,
+    reason: str | None = None,
+    comment: str | None = None,
     send_to_langfuse: bool = True,
 ) -> Feedback:
     """Record rejection feedback."""
@@ -363,8 +363,8 @@ def record_rejection(
 def record_rating(
     trace_id: str,
     rating: int,
-    user_id: Optional[str] = None,
-    comment: Optional[str] = None,
+    user_id: str | None = None,
+    comment: str | None = None,
     send_to_langfuse: bool = True,
 ) -> Feedback:
     """Record rating feedback."""
@@ -374,7 +374,7 @@ def record_rating(
 def record_comment(
     trace_id: str,
     comment: str,
-    user_id: Optional[str] = None,
+    user_id: str | None = None,
     send_to_langfuse: bool = True,
 ) -> Feedback:
     """Record comment feedback."""

@@ -6,13 +6,12 @@ triggering, notification channels, and statistics.
 """
 
 import pytest
+
 from src.observability.alerting import (
-    AlertSeverity,
     AlertChannel,
     AlertManager,
     AlertRule,
-    Alert,
-    get_alert_manager,
+    AlertSeverity,
 )
 
 

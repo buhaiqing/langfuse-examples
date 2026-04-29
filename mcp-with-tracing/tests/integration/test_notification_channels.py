@@ -6,21 +6,21 @@ properly set up and can receive alerts.
 """
 
 import os
+
 import pytest
-from datetime import datetime, timezone
+
 from src.observability.alerting import (
+    AlertChannel,
     AlertManager,
     AlertRule,
     AlertSeverity,
-    AlertChannel,
-    get_alert_manager,
 )
 from src.observability.notifiers import (
-    WeComNotifier,
-    SlackNotifier,
     EmailNotifier,
     PagerDutyNotifier,
+    SlackNotifier,
     WebhookNotifier,
+    WeComNotifier,
 )
 
 

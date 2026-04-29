@@ -5,16 +5,14 @@ Tests for feedback collection.
 import pytest
 
 from src.observability.feedback import (
-    FeedbackType,
-    Feedback,
     FeedbackCollector,
-    get_feedback_collector,
-    record_acceptance,
-    record_rejection,
-    record_rating,
-    record_comment,
+    FeedbackType,
     get_acceptance_rate,
+    get_feedback_collector,
     get_feedback_statistics,
+    record_acceptance,
+    record_rating,
+    record_rejection,
 )
 
 
