@@ -208,7 +208,7 @@ def main() -> None:
         import os
 
         check_interval = int(os.getenv("ALERT_CHECK_INTERVAL_MINUTES", "5"))
-        monitor = start_alert_monitor(check_interval_minutes=check_interval)
+        start_alert_monitor(check_interval_minutes=check_interval)
         logger.info("Rule-based alert monitoring enabled (every %d minutes)", check_interval)
     except Exception as e:
         logger.error("Failed to start rule-based alert monitor: %s", e)
@@ -218,14 +218,15 @@ def main() -> None:
     try:
         smart_check_interval = int(os.getenv("SMART_ALERT_CHECK_INTERVAL_MINUTES", "10"))
         smart_manager = SmartAlertManager(detection_interval_minutes=smart_check_interval)
+        # SmartAlertManager will auto-start when event loop is ready
         smart_manager.start_monitoring()
         logger.info(
-            "Smart ML anomaly detection enabled (every %d minutes) - "
+            "Smart ML anomaly detection configured (every %d minutes) - "
             "Prophet time series + PyOD multivariate + auto-detect metrics",
             smart_check_interval,
         )
     except Exception as e:
-        logger.error("Failed to start smart ML anomaly detection: %s", e)
+        logger.error("Failed to configure smart ML anomaly detection: %s", e)
         logger.info(
             "Server will run without ML-based anomaly detection. "
             "Install dependencies: pip install prophet pyod pandas numpy scikit-learn"

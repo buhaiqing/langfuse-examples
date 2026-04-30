@@ -18,6 +18,7 @@
 - ✅ 反馈收集 - 用户满意度分析
 - ✅ 告警与通知 - 企业微信、Slack、Email 等多渠道通知
 - ✅ 智能告警 - Prophet + PyOD ML 异常检测
+- ✅ **Web 监控仪表板** - Streamlit UI 可视化监控
 
 **告警系统**:
 项目包含两套互补的告警系统：
@@ -62,9 +63,37 @@ SMART_ALERT_CHECK_INTERVAL_MINUTES=10       # 智能告警
 
 ### 3. 运行服务器
 
+#### ⭐ 方式 1: 使用快捷启动脚本（推荐的最佳实践）
+
 ```bash
-python src/server.py
+python run.py
 ```
+
+**为什么推荐？**
+- ✅ 自动检查环境配置、依赖包和项目结构
+- ✅ 提供详细的诊断信息和错误解决方案
+- ✅ 显示完整的访问指南（MCP Inspector、Claude Desktop、Cursor 等）
+- ✅ 无需设置 PYTHONPATH 或安装项目
+- ✅ 友好的交互式确认机制
+
+#### 方式 2: 直接运行（适合快速测试）
+
+```bash
+# 需要设置 PYTHONPATH
+PYTHONPATH=. python src/server.py
+```
+
+#### 方式 3: 使用入口点命令（适合长期使用）
+
+```bash
+# 安装项目到开发模式
+pip install -e .
+
+# 使用命令
+mcp-server
+```
+
+**适用场景**: 需要在多个终端或环境中使用全局命令
 
 ### 4. 运行测试
 
@@ -89,6 +118,25 @@ python scripts/setup_wecom_alerts.py
 ```
 
 详见: [docs/WECOM_QUICK_START.md](docs/WECOM_QUICK_START.md)
+
+### 7. 启动 Streamlit UI 监控仪表板（新增）
+
+```bash
+# 安装 UI 依赖
+make ui-install
+
+# 启动 UI
+make ui
+```
+
+访问 http://localhost:8501 查看监控仪表板，包括：
+- 系统健康总览
+- 实时指标监控
+- 告警管理
+- 反馈分析
+- 提示词版本管理
+
+详见: [ui/README.md](ui/README.md)
 
 ## 项目结构
 

@@ -54,11 +54,32 @@ class SmartAlertManager(AlertManager):
 
         Schedules periodic anomaly detection jobs using APScheduler's
         async-native scheduler instead of threading.
+        Note: This should be called after the event loop is running.
         """
         if self._is_running:
             logger.warning("Monitoring is already running")
             return
 
+        try:
+            # Try to get current event loop
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Event loop is running, we can start AsyncIOScheduler
+                self._do_start()
+            else:
+                # Event loop not running yet, defer startup
+                logger.info("Event loop not running, scheduling deferred startup")
+                async def deferred_start():
+                    await asyncio.sleep(1)
+                    self._do_start()
+                loop.create_task(deferred_start())
+        except RuntimeError:
+            # No event loop exists yet
+            logger.warning("No event loop available, smart monitoring will not start")
+
+    def _do_start(self) -> None:
+        """Actually start the scheduler (called when event loop is ready)."""
         self._scheduler = AsyncIOScheduler()
 
         # Schedule detection cycle

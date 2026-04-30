@@ -1,11 +1,15 @@
 # MCP Langfuse Observability - Makefile
 # Quick commands for development and testing
 
-.PHONY: help test test-unit test-integration test-cov test-html clean
+.PHONY: help test test-unit test-integration test-cov test-html clean ui ui-install start start-all install install-dev
 
 # Default target
 help:
 	@echo "MCP Langfuse Observability - Available Commands"
+	@echo ""
+	@echo "🚀 Quick Start:"
+	@echo "  make start          - Start MCP Server only (backend)"
+	@echo "  make start-all      - Start MCP Server + Streamlit UI (backend + frontend)"
 	@echo ""
 	@echo "Testing:"
 	@echo "  make test           - Run all tests (unit + integration)"
@@ -21,8 +25,100 @@ help:
 	@echo "  make type-check     - Run type checking with mypy"
 	@echo "  make clean          - Clean up temporary files"
 	@echo ""
+	@echo "Streamlit UI:"
+	@echo "  make ui             - Start Streamlit UI dashboard only"
+	@echo "  make ui-install     - Install UI dependencies"
+	@echo ""
+	@echo "Installation:"
+	@echo "  make install        - Install all dependencies"
+	@echo "  make install-dev    - Install development dependencies"
+	@echo ""
 	@echo "Documentation:"
 	@echo "  make docs           - View documentation index"
+
+# Quick Start - Start MCP Server only
+start:
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo "🚀 Starting MCP Langfuse Observability Server..."
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "📋 Server Information:"
+	@echo "  • Backend: MCP Server (FastMCP)"
+	@echo "  • Transport: Stdio (JSON-RPC 2.0)"
+	@echo "  • Logs: Will show in this terminal"
+	@echo ""
+	@echo "🌐 Access Points:"
+	@echo "  • MCP Inspector: http://localhost:5173 (for testing)"
+	@echo "  • Langfuse Dashboard: https://cloud.langfuse.com"
+	@echo ""
+	@echo "💡 Tips:"
+	@echo "  • Press Ctrl+C to stop the server"
+	@echo "  • Use MCP Inspector to test all tools interactively"
+	@echo "  • Check Langfuse dashboard for real-time observability data"
+	@echo ""
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo ""
+	PYTHONPATH=. python run.py
+
+# Quick Start - Start both MCP Server and Streamlit UI
+start-all:
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo "🚀 Starting MCP Langfuse Observability Platform..."
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "📋 Starting Components:"
+	@echo "  ✓ Backend: MCP Server (FastMCP)"
+	@echo "  ✓ Frontend: Streamlit UI Dashboard"
+	@echo ""
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo "🌐 Access Points:"
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "  📊 Streamlit UI Dashboard:"
+	@echo "     → URL: http://localhost:8501"
+	@echo "     → Features:"
+	@echo "       • System health overview"
+	@echo "       • Real-time metrics monitoring"
+	@echo "       • Alert management"
+	@echo "       • Feedback analysis"
+	@echo "       • Prompt version management"
+	@echo "       • System settings"
+	@echo ""
+	@echo "  🔌 MCP Server (Backend):"
+	@echo "     → Transport: Stdio (JSON-RPC 2.0)"
+	@echo "     → MCP Inspector: http://localhost:5173"
+	@echo "     → Available Tools:"
+	@echo "       • health_check"
+	@echo "       • submit_feedback_accept"
+	@echo "       • submit_feedback_reject"
+	@echo "       • submit_feedback_rating"
+	@echo "       • submit_feedback_comment"
+	@echo ""
+	@echo "  📈 Langfuse Dashboard:"
+	@echo "     → URL: https://cloud.langfuse.com"
+	@echo "     → View traces, sessions, and metrics"
+	@echo ""
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo "💡 Usage Tips:"
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "  • Both services will run in this terminal"
+	@echo "  • Press Ctrl+C to stop all services"
+	@echo "  • Open http://localhost:8501 for the UI dashboard"
+	@echo "  • Use MCP Inspector to test backend tools"
+	@echo "  • Check logs below for server activity"
+	@echo ""
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "🔄 Starting services..."
+	@echo ""
+	@echo "─── Streamlit UI (Frontend) ─────────────────────────────────"
+	@streamlit run ui/app.py --server.headless true --server.port 8501 &
+	@sleep 2
+	@echo ""
+	@echo "─── MCP Server (Backend) ────────────────────────────────────"
+	@PYTHONPATH=. python run.py
+	@wait
 
 # Testing commands
 test:
@@ -115,3 +211,34 @@ check-all:
 	uv run black --check src/ tests/
 	uv run mypy src/
 	uv run pytest tests/ -v --cov=src
+
+# Streamlit UI commands
+ui:
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo "📊 Starting Streamlit UI Dashboard..."
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo ""
+	@echo "🌐 Access Point:"
+	@echo "  → URL: http://localhost:8501"
+	@echo ""
+	@echo "📋 Features:"
+	@echo "  • System health overview"
+	@echo "  • Real-time metrics monitoring"
+	@echo "  • Alert management"
+	@echo "  • Feedback analysis"
+	@echo "  • Prompt version management"
+	@echo "  • System settings"
+	@echo ""
+	@echo "💡 Tips:"
+	@echo "  • Press Ctrl+C to stop the UI"
+	@echo "  • The UI will auto-reload on code changes"
+	@echo "  • Requires MCP Server to be running for data"
+	@echo ""
+	@echo "═══════════════════════════════════════════════════════════════"
+	@echo ""
+	streamlit run ui/app.py
+
+ui-install:
+	@echo "Installing Streamlit UI dependencies..."
+	uv pip install -r ui/requirements.txt
+	@echo "✅ UI dependencies installed successfully!"

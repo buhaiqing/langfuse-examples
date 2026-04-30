@@ -41,6 +41,7 @@ class AlertMonitorScheduler:
         Start the background monitoring scheduler.
 
         Registers periodic jobs to check all enabled alert rules.
+        Note: This should be called after the event loop is running.
         """
         if self._is_running:
             logger.warning("Alert monitor is already running")
@@ -48,6 +49,26 @@ class AlertMonitorScheduler:
 
         logger.info("Starting alert monitor (interval: %dmin)...", self.check_interval)
 
+        try:
+            # Try to get current event loop
+            import asyncio
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # Event loop is running, we can start AsyncIOScheduler
+                self._do_start()
+            else:
+                # Event loop not running yet, defer startup
+                logger.info("Event loop not running, scheduling deferred startup")
+                async def deferred_start():
+                    await asyncio.sleep(0.5)
+                    self._do_start()
+                loop.create_task(deferred_start())
+        except RuntimeError:
+            # No event loop exists yet, this is OK - will be started later
+            logger.warning("No event loop available, alert monitor will not start")
+
+    def _do_start(self) -> None:
+        """Actually start the scheduler (called when event loop is ready)."""
         self.scheduler = AsyncIOScheduler()
 
         # Register job to check all alert rules
