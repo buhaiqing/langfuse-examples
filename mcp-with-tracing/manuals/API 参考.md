@@ -6,6 +6,69 @@
 
 本系统提供以下 MCP 工具供客户端调用，所有工具均集成了 Langfuse 可观测性追踪。
 
+### 健康检查工具 (Health Check)
+
+#### 0. health_check
+**功能**: 检查 MCP 服务器和所有组件的健康状态
+
+**用途**: 获取服务器运行状态、Langfuse 连接、告警系统、智能检测等 comprehensive 健康信息。
+
+**参数**: 无
+
+**返回值**:
+```python
+{
+    "status": "healthy",  # 或 "degraded"
+    "timestamp": 1713024000.0,
+    "uptime_seconds": 3600.0,
+    "components": {
+        "langfuse": {
+            "status": "connected",
+            "available": True
+        },
+        "alert_manager": {
+            "status": "healthy",
+            "rules_loaded": 5
+        },
+        "alert_monitor": {
+            "status": "running",
+            "is_running": True,
+            "check_interval_minutes": 5
+        },
+        "smart_alert_manager": {
+            "status": "running",
+            "is_running": True,
+            "detection_interval_minutes": 10,
+            "last_detection": "2026-04-13T10:00:00"
+        },
+        "metrics_cache": {
+            "status": "healthy",
+            "hit_rate": 0.85,
+            "size": 12,
+            "ttl_seconds": 300
+        }
+    }
+}
+```
+
+**使用示例**:
+```python
+result = health_check()
+print(result["status"])  # "healthy"
+print(result["components"]["langfuse"]["status"])  # "connected"
+```
+
+**Langfuse 追踪**: 自动记录为 `health_check` span，包含所有组件状态。
+
+**检查的组件**:
+- ✅ Langfuse 连接状态
+- ✅ 告警管理器（规则加载数量）
+- ✅ 告警监控运行状态（传统告警）
+- ✅ 智能告警管理器（ML 异常检测）
+- ✅ 指标缓存统计（TTLCache 性能）
+
+---
+
 ### 反馈收集工具 (Feedback Tools)
 
 #### 1. submit_feedback_accept
@@ -205,10 +268,73 @@ AlertRule(
     threshold: float,
     operator: str,
     severity: AlertSeverity,
-    window_minutes: int = 60
+    window_minutes: int = 60,
+    cooldown_minutes: int = 30,
+    max_alerts_per_hour: int = 5
 )
 ```
 **用途**: 定义告警规则，用于监控关键指标并触发通知。
+
+**新增**: 支持冷却期和每小时最大告警数，防止告警风暴。
+
+### AlertMonitorScheduler (告警监控调度器)
+```python
+from src.observability.alert_monitor import start_alert_monitor, get_alert_monitor
+
+# 启动告警监控（自动定期检测）
+monitor = start_alert_monitor(check_interval_minutes=5)
+
+# 获取监控状态
+status = get_alert_monitor().get_status()
+```
+**用途**: 后台自动巡检告警规则，定期检测指标并触发告警。
+
+**特性**:
+- ✅ 使用 AsyncIOScheduler（非 threading）
+- ✅ 自动定期执行（可配置间隔）
+- ✅ 优雅的启动/停止管理
+- ✅ 异常安全（不会因错误崩溃）
+
+### SmartAlertManager (智能告警管理器)
+```python
+from src.observability.smart_alerting import SmartAlertManager
+
+# 启动 ML 异常检测
+manager = SmartAlertManager(detection_interval_minutes=10)
+manager.start_monitoring()
+
+# 获取状态
+status = manager.get_status()
+```
+**用途**: 基于机器学习的异常检测，自动发现未知异常模式。
+
+**技术栈**:
+- **Prophet**: 时间序列异常检测（单指标）
+- **PyOD**: 多维异常检测（多指标关联）
+- **MetricsCollector**: 自动收集成功率、延迟、QPS、满意度
+
+### AnomalyDetector (异常检测引擎)
+```python
+from src.observability.anomaly_detector import AnomalyDetector
+
+detector = AnomalyDetector()
+
+# 时间序列检测（Prophet）
+time_series_result = detector.detect_time_series_anomaly(
+    metric_name="success_rate",
+    historical_data=[...],  # 历史数据点
+)
+
+# 多维异常检测（PyOD Isolation Forest）
+multivariate_result = detector.detect_multivariate_anomaly(
+    metrics_data={
+        "success_rate": [...],
+        "latency_p95": [...],
+        "request_rate": [...],
+    }
+)
+```
+**用途**: 双引擎异常检测，提高准确性和覆盖率。
 
 ## 版本管理 API
 
@@ -269,7 +395,7 @@ WeComNotifier(webhook_url: str)
 
 **示例**:
 ```python
-from src.observability.notification import WeComNotifier
+from src.observability.notifiers import WeComNotifier
 
 notifier = WeComNotifier(
     webhook_url="https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY"

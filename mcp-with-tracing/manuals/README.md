@@ -12,12 +12,11 @@
 |------|------|----------|
 | [快速入门](快速入门.md) | 5 分钟开始使用 | 5 分钟 |
 | [用户手册](用户手册.md) | 完整使用指南 | 30 分钟 |
+| [API 参考](API 参考.md) | API 接口完整参考 | 20 分钟 |
 
 ### 📖 API 文档
 
-| 文档 | 用途 |
-|------|------|
-| [API 参考](API 参考.md) | API 接口完整参考 |
+> 已移至入门指南上方，方便快速访问。
 
 ### 🔧 配置指南
 
@@ -39,7 +38,9 @@
 | 文档 | 用途 |
 |------|------|
 | [告警配置](../docs/wecom-alert-setup.md) | 配置告警通知 |
+| [智能告警](../docs/smart-alerting-guide.md) ✨ | ML 异常检测部署 |
 | [事件响应](../docs/event-response-runbook.md) | 告警处理流程 |
+| [告警系统对比](../docs/alert-systems-comparison.md) | 传统 vs 智能告警 |
 
 ---
 
@@ -73,6 +74,12 @@
 
 查看 [事件响应手册](../docs/event-response-runbook.md)
 
+### 我想启用智能 ML 异常检测
+
+1. 安装 ML 依赖：`uv pip install prophet pyod pandas numpy scikit-learn`
+2. 阅读 [智能告警指南](../docs/smart-alerting-guide.md)
+3. 查看 [智能告警快速启动](../docs/phase6-quick-start.md)
+
 ---
 
 ## 📞 获取帮助
@@ -95,6 +102,7 @@
 
 | 日期 | 更新内容 |
 |------|----------|
+| 2026-04-13 | 同步最新功能：添加 health_check 工具、智能告警 API、修正导入路径和测试脚本 |
 | 2026-04-08 | 初始版本，包含完整用户手册 |
 
 ---

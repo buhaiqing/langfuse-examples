@@ -4,25 +4,25 @@
 
 ## 项目状态
 
-**当前阶段**: Phase 6 ✅ 已完成 (100%)
+**当前状态**: ✅ 生产就绪 (100%)
 
 **测试结果**: 
 - 单元测试：114 passed
 - 集成测试：20 passed
 - 代码覆盖率：核心模块 90%+
 
-**完成功能**:
-- ✅ Phase 1: 核心插桩
-- ✅ Phase 2: 会话追踪
-- ✅ Phase 3: 提示词版本管理
-- ✅ Phase 4: 反馈收集
-- ✅ Phase 5: 告警与通知（企业微信、Slack、Email等）
-- ✅ Phase 6: 智能告警(ML) - Prophet+PyOD异常检测
+**核心功能**:
+- ✅ 核心插桩 - Langfuse SDK 集成与工具追踪
+- ✅ 会话追踪 - 跨工具调用的会话管理
+- ✅ 提示词版本管理 - Prompt A/B 测试支持
+- ✅ 反馈收集 - 用户满意度分析
+- ✅ 告警与通知 - 企业微信、Slack、Email 等多渠道通知
+- ✅ 智能告警 - Prophet + PyOD ML 异常检测
 
 **告警系统**:
-项目包含两套并行的告警系统：
-- **传统告警 (Phase 5)**: 基于固定阈值的规则引擎，适合明确的业务规则
-- **智能告警 (Phase 6)**: 基于机器学习的异常检测，自动发现未知异常模式
+项目包含两套互补的告警系统：
+- **传统告警**: 基于固定阈值的规则引擎，适合明确的业务规则
+- **智能告警**: 基于机器学习的异常检测，自动发现未知异常模式
 - 两者互补运行，共享通知渠道，统一告警存储
 
 ## 快速开始
@@ -52,13 +52,13 @@ LANGFUSE_HOST=https://cloud.langfuse.com
 WECOM_WEBHOOK_URL=https://qyapi.weixin.qq.com/cgi-bin/webhook/send?key=YOUR_KEY
 
 # 告警检查间隔（分钟）
-ALERT_CHECK_INTERVAL_MINUTES=5              # 传统告警（Phase 5）
-SMART_ALERT_CHECK_INTERVAL_MINUTES=10       # 智能告警（Phase 6）
+ALERT_CHECK_INTERVAL_MINUTES=5              # 传统告警
+SMART_ALERT_CHECK_INTERVAL_MINUTES=10       # 智能告警
 ```
 
 详细配置指南: 
 - [企业微信配置](docs/WECOM_QUICK_START.md)
-- [智能告警快速启动](docs/phase6-quick-start.md)
+- [智能告警指南](docs/smart-alerting-guide.md)
 
 ### 3. 运行服务器
 
@@ -106,11 +106,11 @@ mcp-with-tracing/
 │       ├── session.py         # 会话追踪
 │       ├── prompt_versioning.py # 提示词版本管理
 │       ├── feedback.py        # 反馈收集
-│       ├── alerting.py        # 告警管理 (Phase 5)
-│       ├── alert_monitor.py   # 告警监控调度器 (Phase 5)
-│       ├── smart_alerting.py  # 智能告警管理器 (Phase 6)
-│       ├── anomaly_detector.py # 异常检测引擎 (Phase 6)
-│       ├── metrics_collector.py # 指标收集器 (Phase 6)
+│       ├── alerting.py        # 告警管理
+│       ├── alert_monitor.py   # 告警监控调度器
+│       ├── smart_alerting.py  # 智能告警管理器
+│       ├── anomaly_detector.py # 异常检测引擎
+│       ├── metrics_collector.py # 指标收集器
 │       └── notifiers.py       # 通知渠道（企业微信、Slack等）
 ├── tests/                     # 单元测试
 ├── scripts/                   # 测试和配置脚本
@@ -144,7 +144,7 @@ scripts/test_success_failure_tracking.py: 3/3 passed
 
 - [整体开发计划](devs/DEVELOPMENT_PLAN.md)
 - [当前项目状态](devs/CURRENT_STATUS.md)
-- [Phase 1-6 完成总结](devs/PROJECT_COMPLETION_SUMMARY.md)
+- [项目完成总结](devs/PROJECT_COMPLETION_SUMMARY.md)
 - [执行摘要](devs/EXECUTIVE_SUMMARY.md)
 
 ## 相关文档
