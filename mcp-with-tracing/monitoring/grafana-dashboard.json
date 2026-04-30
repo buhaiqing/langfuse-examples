@@ -1,0 +1,469 @@
+{
+  "dashboard": {
+    "id": null,
+    "uid": "mcp-observability",
+    "title": "MCP Observability Platform",
+    "tags": ["mcp", "langfuse", "observability"],
+    "timezone": "browser",
+    "refresh": "30s",
+    "time": {
+      "from": "now-6h",
+      "to": "now"
+    },
+    "templating": {
+      "list": [
+        {
+          "name": "time_window",
+          "type": "interval",
+          "query": "1m,5m,10m,30m,1h",
+          "current": {
+            "text": "10m",
+            "value": "10m"
+          }
+        },
+        {
+          "name": "tool_name",
+          "type": "query",
+          "query": "label_values(mcp_tool_calls_total, tool)",
+          "current": {
+            "text": "All",
+            "value": "$__all"
+          },
+          "multi": true
+        }
+      ]
+    },
+    "panels": [
+      {
+        "id": 1,
+        "title": "🎯 系统健康总览",
+        "type": "row",
+        "collapsed": false,
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 0}
+      },
+      {
+        "id": 2,
+        "title": "成功率",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mcp_success_rate",
+            "legendFormat": "Success Rate"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 0.95},
+                {"color": "green", "value": 0.99}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 0, "y": 1}
+      },
+      {
+        "id": 3,
+        "title": "活跃会话数",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mcp_active_sessions",
+            "legendFormat": "Active Sessions"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 1},
+                {"color": "green", "value": 10}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 6, "y": 1}
+      },
+      {
+        "id": 4,
+        "title": "请求率 (QPS)",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mcp_request_rate_qps",
+            "legendFormat": "QPS"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "reqps",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "blue", "value": 0},
+                {"color": "green", "value": 5},
+                {"color": "yellow", "value": 20}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 12, "y": 1}
+      },
+      {
+        "id": 5,
+        "title": "用户满意度",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mcp_user_satisfaction_avg",
+            "legendFormat": "Satisfaction"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "min": 0,
+            "max": 5,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 2.5},
+                {"color": "green", "value": 3.5}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 4, "w": 6, "x": 18, "y": 1}
+      },
+      {
+        "id": 6,
+        "title": "📈 性能指标趋势",
+        "type": "row",
+        "collapsed": false,
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 5}
+      },
+      {
+        "id": 7,
+        "title": "延迟分位数对比 (P50/P95/P99)",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mcp_latency_p50_ms",
+            "legendFormat": "P50"
+          },
+          {
+            "expr": "mcp_latency_p95_ms",
+            "legendFormat": "P95"
+          },
+          {
+            "expr": "mcp_latency_p99_ms",
+            "legendFormat": "P99"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "lineWidth": 2,
+            "fillOpacity": 10
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 6}
+      },
+      {
+        "id": 8,
+        "title": "成功率与请求率",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mcp_success_rate",
+            "legendFormat": "Success Rate",
+            "yAxis": 1
+          },
+          {
+            "expr": "mcp_request_rate_qps",
+            "legendFormat": "QPS",
+            "yAxis": 2
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "lineWidth": 2
+          },
+          "overrides": [
+            {
+              "matcher": {"id": "byRegexp", "options": ".*Success Rate.*"},
+              "properties": [
+                {"id": "unit", "value": "percentunit"},
+                {"id": "min", "value": 0},
+                {"id": "max", "value": 1}
+              ]
+            },
+            {
+              "matcher": {"id": "byRegexp", "options": ".*QPS.*"},
+              "properties": [
+                {"id": "unit", "value": "reqps"}
+              ]
+            }
+          ]
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 6}
+      },
+      {
+        "id": 9,
+        "title": "🔍 错误分析",
+        "type": "row",
+        "collapsed": false,
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 14}
+      },
+      {
+        "id": 10,
+        "title": "错误类型分布",
+        "type": "bargauge",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mcp_errors_total",
+            "legendFormat": "{{type}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 5},
+                {"color": "red", "value": 10}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 0, "y": 15}
+      },
+      {
+        "id": 11,
+        "title": "错误率趋势",
+        "type": "timeseries",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(mcp_errors_total[5m])",
+            "legendFormat": "{{type}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops",
+            "lineWidth": 2,
+            "fillOpacity": 20
+          }
+        },
+        "gridPos": {"h": 8, "w": 12, "x": 12, "y": 15}
+      },
+      {
+        "id": 12,
+        "title": "🔧 工具性能监控",
+        "type": "row",
+        "collapsed": false,
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 23}
+      },
+      {
+        "id": 13,
+        "title": "工具调用次数",
+        "type": "bargauge",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(mcp_tool_calls_total{tool=~\"$tool_name\"}[5m])",
+            "legendFormat": "{{tool}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ops"
+          }
+        },
+        "gridPos": {"h": 8, "w": 8, "x": 0, "y": 24}
+      },
+      {
+        "id": 14,
+        "title": "工具 P95 延迟",
+        "type": "bargauge",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mcp_tool_latency_p95_ms{tool=~\"$tool_name\"}",
+            "legendFormat": "{{tool}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "ms",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "green", "value": 0},
+                {"color": "yellow", "value": 1000},
+                {"color": "red", "value": 2000}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 8, "x": 8, "y": 24}
+      },
+      {
+        "id": 15,
+        "title": "工具成功率",
+        "type": "bargauge",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "rate(mcp_tool_calls_total{success=\"true\", tool=~\"$tool_name\"}[5m]) / rate(mcp_tool_calls_total{tool=~\"$tool_name\"}[5m])",
+            "legendFormat": "{{tool}}"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 0.95},
+                {"color": "green", "value": 0.99}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 8, "w": 8, "x": 16, "y": 24}
+      },
+      {
+        "id": 16,
+        "title": "⚙️ 基础设施状态",
+        "type": "row",
+        "collapsed": false,
+        "gridPos": {"h": 1, "w": 24, "x": 0, "y": 32}
+      },
+      {
+        "id": 17,
+        "title": "缓存命中率",
+        "type": "gauge",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mcp_cache_hit_rate",
+            "legendFormat": "Hit Rate"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "percentunit",
+            "min": 0,
+            "max": 1,
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "yellow", "value": 0.5},
+                {"color": "green", "value": 0.8}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 6, "w": 6, "x": 0, "y": 33}
+      },
+      {
+        "id": 18,
+        "title": "缓存条目数",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mcp_cache_entries",
+            "legendFormat": "Cache Size"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "short",
+            "max": 64
+          }
+        },
+        "gridPos": {"h": 6, "w": 6, "x": 6, "y": 33}
+      },
+      {
+        "id": 19,
+        "title": "告警监控状态",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mcp_alert_monitor_running",
+            "legendFormat": "Alert Monitor"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bool_yes_no",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 6, "w": 6, "x": 12, "y": 33}
+      },
+      {
+        "id": 20,
+        "title": "ML 异常检测状态",
+        "type": "stat",
+        "datasource": "Prometheus",
+        "targets": [
+          {
+            "expr": "mcp_smart_alert_running",
+            "legendFormat": "Smart Alert"
+          }
+        ],
+        "fieldConfig": {
+          "defaults": {
+            "unit": "bool_yes_no",
+            "thresholds": {
+              "mode": "absolute",
+              "steps": [
+                {"color": "red", "value": 0},
+                {"color": "green", "value": 1}
+              ]
+            }
+          }
+        },
+        "gridPos": {"h": 6, "w": 6, "x": 18, "y": 33}
+      }
+    ],
+    "schemaVersion": 38,
+    "version": 1
+  },
+  "overwrite": true,
+  "message": "MCP Observability Platform Dashboard v1.0"
+}

@@ -3,6 +3,7 @@
 
 从项目模块加载数据，提供缓存和错误处理。
 """
+
 import logging
 from datetime import datetime
 from typing import Any
@@ -19,6 +20,7 @@ def load_health_status() -> dict[str, Any]:
     """
     try:
         from src.observability.health import get_health_status
+
         return get_health_status()
     except Exception as e:
         logger.error(f"Failed to load health status: {e}")
@@ -76,16 +78,26 @@ def load_current_metrics() -> dict[str, Any]:
         return {
             "success_rate": collector.collect_success_rate(),
             "latency_p95": collector.collect_latency_p95(),
+            "latency_p50": collector.collect_latency_p50(),
+            "latency_p99": collector.collect_latency_p99(),
             "request_rate": collector.collect_request_rate(),
             "satisfaction": collector.collect_avg_satisfaction(),
+            "active_sessions": collector.count_active_sessions(),
+            "error_breakdown": collector.collect_error_breakdown(),
+            "error_count": sum(collector.collect_error_breakdown().values()),
         }
     except Exception as e:
         logger.error(f"Failed to load current metrics: {e}")
         return {
             "success_rate": 0.0,
             "latency_p95": 0.0,
+            "latency_p50": 0.0,
+            "latency_p99": 0.0,
             "request_rate": 0.0,
             "satisfaction": None,
+            "active_sessions": 0,
+            "error_breakdown": {},
+            "error_count": 0,
         }
 
 
@@ -105,16 +117,18 @@ def load_alert_rules() -> list[dict[str, Any]]:
         for rule_name in manager.list_rules():
             rule = manager.get_rule(rule_name)
             if rule:
-                rules.append({
-                    "name": rule.name,
-                    "metric": rule.metric,
-                    "threshold": rule.threshold,
-                    "operator": rule.operator,
-                    "severity": rule.severity.value,
-                    "window_minutes": rule.window_minutes,
-                    "enabled": rule.enabled,
-                    "channels": [c.value for c in rule.channels],
-                })
+                rules.append(
+                    {
+                        "name": rule.name,
+                        "metric": rule.metric,
+                        "threshold": rule.threshold,
+                        "operator": rule.operator,
+                        "severity": rule.severity.value,
+                        "window_minutes": rule.window_minutes,
+                        "enabled": rule.enabled,
+                        "channels": [c.value for c in rule.channels],
+                    }
+                )
 
         return rules
     except Exception as e:
@@ -266,12 +280,14 @@ def load_prompt_list() -> list[dict[str, Any]]:
             versions = manager.get_all_versions(prompt_id)
             active_version = manager.get_active_version(prompt_id)
 
-            prompts.append({
-                "prompt_id": prompt_id,
-                "version_count": len(versions),
-                "ab_test_enabled": manager.ab_test_enabled(prompt_id),
-                "active_version": active_version,
-            })
+            prompts.append(
+                {
+                    "prompt_id": prompt_id,
+                    "version_count": len(versions),
+                    "ab_test_enabled": manager.ab_test_enabled(prompt_id),
+                    "active_version": active_version,
+                }
+            )
 
         return prompts
     except Exception as e:

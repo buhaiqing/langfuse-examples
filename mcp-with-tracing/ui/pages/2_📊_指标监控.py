@@ -3,6 +3,7 @@
 
 展示 4 个核心指标的趋势图和当前值，支持时间范围选择和自动刷新。
 """
+
 import sys
 from pathlib import Path
 
@@ -57,6 +58,7 @@ st.markdown("---")
 st.subheader("当前指标值")
 metrics = load_current_metrics()
 
+# 第一行：核心指标
 col1, col2, col3, col4 = st.columns(4)
 
 with col1:
@@ -92,6 +94,38 @@ with col4:
             label="用户满意度",
             value="N/A",
         )
+
+# 第二行：新增性能指标
+st.markdown("### 详细性能指标")
+col1, col2, col3, col4 = st.columns(4)
+
+with col1:
+    latency_p50 = metrics.get("latency_p50", 0)
+    st.metric(
+        label="P50 延迟 (中位数)",
+        value=format_latency(latency_p50),
+    )
+
+with col2:
+    latency_p99 = metrics.get("latency_p99", 0)
+    st.metric(
+        label="P99 延迟 (长尾)",
+        value=format_latency(latency_p99),
+    )
+
+with col3:
+    active_sessions = metrics.get("active_sessions", 0)
+    st.metric(
+        label="活跃会话数",
+        value=f"{active_sessions}",
+    )
+
+with col4:
+    error_count = metrics.get("error_count", 0)
+    st.metric(
+        label="错误数",
+        value=f"{error_count}",
+    )
 
 st.markdown("---")
 
@@ -177,6 +211,106 @@ with col2:
 
 st.markdown("---")
 
+# 错误分类分析
+st.subheader("错误分类分析")
+error_breakdown = metrics.get("error_breakdown", {})
+
+if error_breakdown:
+    col1, col2 = st.columns([2, 1])
+
+    with col1:
+        # 柱状图展示错误分类
+        import pandas as pd
+
+        error_df = pd.DataFrame([{"错误类型": k, "数量": v} for k, v in error_breakdown.items()])
+
+        fig = px.bar(
+            error_df,
+            x="错误类型",
+            y="数量",
+            title="错误类型分布",
+            color="数量",
+            color_continuous_scale="Reds",
+        )
+        fig.update_layout(height=300)
+        st.plotly_chart(fig, use_container_width=True)
+
+    with col2:
+        # 饼图展示错误占比
+        fig = px.pie(
+            values=list(error_breakdown.values()),
+            names=list(error_breakdown.keys()),
+            title="错误占比",
+        )
+        fig.update_layout(height=300)
+        st.plotly_chart(fig, use_container_width=True)
+else:
+    st.success("✅ 当前无错误")
+
+st.markdown("---")
+
+# 工具性能监控
+st.subheader("工具性能监控")
+
+# 获取工具列表（从指标中推断或手动输入）
+tool_names = st.text_input(
+    "输入工具名称（逗号分隔）", value="tool_a, tool_b", help="输入要监控的工具名称，用逗号分隔"
+)
+
+if tool_names:
+    tools = [name.strip() for name in tool_names.split(",") if name.strip()]
+
+    if tools:
+        # 加载每个工具的指标
+        tool_metrics_list = []
+        for tool_name in tools:
+            try:
+                from src.observability.metrics_collector import MetricsCollector
+
+                collector = MetricsCollector()
+                tool_metric = collector.collect_tool_metrics(tool_name)
+                tool_metrics_list.append(tool_metric)
+            except Exception as e:
+                st.warning(f"无法加载工具 {tool_name} 的指标: {e}")
+
+        if tool_metrics_list:
+            # 显示工具指标表格
+            import pandas as pd
+
+            tool_df = pd.DataFrame(tool_metrics_list)
+            tool_df["成功率"] = tool_df["success_rate"].apply(lambda x: f"{x:.2%}")
+            tool_df["P50 延迟"] = tool_df["p50_latency_ms"].apply(lambda x: f"{x:.0f}ms")
+            tool_df["P95 延迟"] = tool_df["p95_latency_ms"].apply(lambda x: f"{x:.0f}ms")
+            tool_df["P99 延迟"] = tool_df["p99_latency_ms"].apply(lambda x: f"{x:.0f}ms")
+
+            display_df = tool_df[
+                [
+                    "tool_name",
+                    "call_count",
+                    "成功率",
+                    "P50 延迟",
+                    "P95 延迟",
+                    "P99 延迟",
+                    "error_count",
+                ]
+            ].rename(columns={"tool_name": "工具名称", "call_count": "调用次数", "error_count": "错误数"})
+
+            st.dataframe(display_df, use_container_width=True)
+
+            # 工具调用次数对比图
+            fig = px.bar(
+                tool_metrics_list,
+                x="tool_name",
+                y="call_count",
+                title="工具调用次数对比",
+                color="call_count",
+                color_continuous_scale="Blues",
+            )
+            fig.update_layout(height=300)
+            st.plotly_chart(fig, use_container_width=True)
+
+st.markdown("---")
+
 # 数据详情
 with st.expander("📋 查看原始数据"):
     st.write("### 成功率数据")
@@ -192,8 +326,4 @@ with st.expander("📋 查看原始数据"):
         st.info("无数据")
 
 st.markdown("---")
-st.caption(
-    f"数据时间范围: {time_range} | "
-    f"数据源: Langfuse API (TTL 缓存) | "
-    f"刷新间隔: 60s"
-)
+st.caption(f"数据时间范围: {time_range} | " f"数据源: Langfuse API (TTL 缓存) | " f"刷新间隔: 60s")

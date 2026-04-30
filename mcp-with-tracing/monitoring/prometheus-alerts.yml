@@ -1,0 +1,337 @@
+# Prometheus 告警规则配置
+# 
+# 适用项目: MCP Langfuse Observability Platform
+# 版本: 1.0.0
+# 最后更新: 2026-04-30
+
+groups:
+  # ==========================================
+  # 可用性告警
+  # ==========================================
+  - name: mcp_availability_alerts
+    interval: 30s
+    rules:
+      # 成功率过低
+      - alert: MCPSuccessRateLow
+        expr: mcp_success_rate < 0.99
+        for: 5m
+        labels:
+          severity: warning
+          team: mcp-platform
+        annotations:
+          summary: "MCP 成功率过低 (当前值: {{ $value }})"
+          description: "过去 5 分钟内 MCP 成功率为 {{ $value }}，低于阈值 0.99"
+          runbook_url: "https://wiki.example.com/runbooks/mcp-success-rate"
+
+      - alert: MCPSuccessRateCritical
+        expr: mcp_success_rate < 0.95
+        for: 2m
+        labels:
+          severity: critical
+          team: mcp-platform
+        annotations:
+          summary: "MCP 成功率严重下降 (当前值: {{ $value }})"
+          description: "过去 2 分钟内 MCP 成功率为 {{ $value }}，低于严重阈值 0.95"
+          runbook_url: "https://wiki.example.com/runbooks/mcp-success-rate-critical"
+
+      # Langfuse 连接失败
+      - alert: MCPLangfuseDisconnected
+        expr: mcp_langfuse_connected == 0
+        for: 1m
+        labels:
+          severity: critical
+          team: mcp-platform
+        annotations:
+          summary: "MCP 无法连接到 Langfuse"
+          description: "MCP 服务已失去与 Langfuse 的连接超过 1 分钟"
+          runbook_url: "https://wiki.example.com/runbooks/langfuse-connection"
+
+  # ==========================================
+  # 性能告警
+  # ==========================================
+  - name: mcp_performance_alerts
+    interval: 30s
+    rules:
+      # P50 延迟过高
+      - alert: MCPLatencyP50High
+        expr: mcp_latency_p50_ms > 500
+        for: 5m
+        labels:
+          severity: warning
+          team: mcp-platform
+        annotations:
+          summary: "MCP P50 延迟过高 (当前值: {{ $value }}ms)"
+          description: "过去 5 分钟内 P50 延迟为 {{ $value }}ms，超过阈值 500ms"
+
+      - alert: MCPLatencyP50Critical
+        expr: mcp_latency_p50_ms > 1000
+        for: 2m
+        labels:
+          severity: critical
+          team: mcp-platform
+        annotations:
+          summary: "MCP P50 延迟严重过高 (当前值: {{ $value }}ms)"
+          description: "过去 2 分钟内 P50 延迟为 {{ $value }}ms，超过严重阈值 1000ms"
+
+      # P95 延迟过高
+      - alert: MCPLatencyP95High
+        expr: mcp_latency_p95_ms > 1000
+        for: 5m
+        labels:
+          severity: warning
+          team: mcp-platform
+        annotations:
+          summary: "MCP P95 延迟过高 (当前值: {{ $value }}ms)"
+          description: "过去 5 分钟内 P95 延迟为 {{ $value }}ms，超过阈值 1000ms"
+
+      - alert: MCPLatencyP95Critical
+        expr: mcp_latency_p95_ms > 2000
+        for: 2m
+        labels:
+          severity: critical
+          team: mcp-platform
+        annotations:
+          summary: "MCP P95 延迟严重过高 (当前值: {{ $value }}ms)"
+          description: "过去 2 分钟内 P95 延迟为 {{ $value }}ms，超过严重阈值 2000ms"
+
+      # P99 延迟过高 (长尾延迟)
+      - alert: MCPLatencyP99High
+        expr: mcp_latency_p99_ms > 2000
+        for: 5m
+        labels:
+          severity: warning
+          team: mcp-platform
+        annotations:
+          summary: "MCP P99 长尾延迟过高 (当前值: {{ $value }}ms)"
+          description: "过去 5 分钟内 P99 延迟为 {{ $value }}ms，超过阈值 2000ms"
+          action: "检查是否有慢查询或资源瓶颈"
+
+      - alert: MCPLatencyP99Critical
+        expr: mcp_latency_p99_ms > 5000
+        for: 2m
+        labels:
+          severity: critical
+          team: mcp-platform
+        annotations:
+          summary: "MCP P99 长尾延迟严重过高 (当前值: {{ $value }}ms)"
+          description: "过去 2 分钟内 P99 延迟为 {{ $value }}ms，超过严重阈值 5000ms"
+          action: "立即检查超时配置和资源使用"
+
+      # QPS 突增
+      - alert: MCPRequestRateSpike
+        expr: |
+          mcp_request_rate_qps > (
+            avg_over_time(mcp_request_rate_qps[1h]) * 2
+          ) and mcp_request_rate_qps > 10
+        for: 3m
+        labels:
+          severity: warning
+          team: mcp-platform
+        annotations:
+          summary: "MCP 请求率突增 (当前值: {{ $value }} qps)"
+          description: "请求率是过去 1 小时平均值的 2 倍以上，当前为 {{ $value }} qps"
+          action: "检查是否有异常流量或爬虫"
+
+      # QPS 突降
+      - alert: MCPRequestRateDrop
+        expr: |
+          mcp_request_rate_qps < (
+            avg_over_time(mcp_request_rate_qps[1h]) * 0.5
+          ) and mcp_request_rate_qps > 0
+        for: 5m
+        labels:
+          severity: warning
+          team: mcp-platform
+        annotations:
+          summary: "MCP 请求率突降 (当前值: {{ $value }} qps)"
+          description: "请求率降至过去 1 小时平均值的 50% 以下，当前为 {{ $value }} qps"
+          action: "检查上游服务是否异常"
+
+  # ==========================================
+  # 质量告警
+  # ==========================================
+  - name: mcp_quality_alerts
+    interval: 60s
+    rules:
+      # 用户满意度下降
+      - alert: MCPUserSatisfactionLow
+        expr: mcp_user_satisfaction_avg < 3.5
+        for: 15m
+        labels:
+          severity: warning
+          team: mcp-platform
+        annotations:
+          summary: "MCP 用户满意度下降 (当前值: {{ $value }}/5)"
+          description: "过去 15 分钟平均用户满意度为 {{ $value }}/5，低于阈值 3.5"
+
+      - alert: MCPUserSatisfactionCritical
+        expr: mcp_user_satisfaction_avg < 2.5
+        for: 10m
+        labels:
+          severity: critical
+          team: mcp-platform
+        annotations:
+          summary: "MCP 用户满意度严重下降 (当前值: {{ $value }}/5)"
+          description: "过去 10 分钟平均用户满意度为 {{ $value }}/5，低于严重阈值 2.5"
+          action: "检查最近是否有服务降级或功能异常"
+
+      # 反馈接受率过低
+      - alert: MCPFeedbackAcceptanceLow
+        expr: mcp_feedback_acceptance_rate < 70
+        for: 15m
+        labels:
+          severity: warning
+          team: mcp-platform
+        annotations:
+          summary: "MCP 反馈接受率过低 (当前值: {{ $value }}%)"
+          description: "过去 15 分钟反馈接受率为 {{ $value }}%，低于阈值 70%"
+
+  # ==========================================
+  # 会话告警
+  # ==========================================
+  - name: mcp_session_alerts
+    interval: 60s
+    rules:
+      # 活跃会话数归零
+      - alert: MCPNoActiveSessions
+        expr: mcp_active_sessions == 0
+        for: 5m
+        labels:
+          severity: critical
+          team: mcp-platform
+        annotations:
+          summary: "MCP 无活跃会话"
+          description: "过去 5 分钟内没有任何活跃会话，可能服务完全不可用"
+          action: "立即检查服务状态和上游依赖"
+
+      # 活跃会话数突增
+      - alert: MCPActiveSessionsSpike
+        expr: |
+          mcp_active_sessions > (
+            avg_over_time(mcp_active_sessions[1h]) * 3
+          ) and mcp_active_sessions > 50
+        for: 5m
+        labels:
+          severity: warning
+          team: mcp-platform
+        annotations:
+          summary: "MCP 活跃会话数突增 (当前值: {{ $value }})"
+          description: "活跃会话数是过去 1 小时平均值的 3 倍以上，当前为 {{ $value }}"
+          action: "检查是否有批量任务或异常连接"
+
+  # ==========================================
+  # 错误分析告警
+  # ==========================================
+  - name: mcp_error_alerts
+    interval: 30s
+    rules:
+      # 超时错误过多
+      - alert: MCPTimeoutErrorsHigh
+        expr: rate(mcp_errors_total{type="timeout"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: mcp-platform
+        annotations:
+          summary: "MCP 超时错误率过高"
+          description: "过去 5 分钟超时错误率为 {{ $value }} errors/s"
+          action: "检查下游服务响应时间和超时配置"
+
+      # 限流错误过多
+      - alert: MCPRateLimitErrorsHigh
+        expr: rate(mcp_errors_total{type="rate_limit"}[5m]) > 0.05
+        for: 5m
+        labels:
+          severity: warning
+          team: mcp-platform
+        annotations:
+          summary: "MCP 限流错误率过高"
+          description: "过去 5 分钟限流错误率为 {{ $value }} errors/s"
+          action: "检查 API 速率限制配置和流量分布"
+
+      # 验证错误过多
+      - alert: MCPValidationErrorsHigh
+        expr: rate(mcp_errors_total{type="validation_error"}[5m]) > 0.1
+        for: 5m
+        labels:
+          severity: warning
+          team: mcp-platform
+        annotations:
+          summary: "MCP 验证错误率过高"
+          description: "过去 5 分钟验证错误率为 {{ $value }} errors/s"
+          action: "检查输入验证逻辑和客户端请求格式"
+
+  # ==========================================
+  # 工具维度告警
+  # ==========================================
+  - name: mcp_tool_alerts
+    interval: 60s
+    rules:
+      # 特定工具成功率过低
+      - alert: MCPToolSuccessRateLow
+        expr: |
+          (
+            rate(mcp_tool_calls_total{success="true"}[5m]) 
+            / rate(mcp_tool_calls_total[5m])
+          ) < 0.95
+        for: 5m
+        labels:
+          severity: warning
+          team: mcp-platform
+        annotations:
+          summary: "MCP 工具 {{ $labels.tool }} 成功率过低"
+          description: "工具 {{ $labels.tool }} 过去 5 分钟成功率为 {{ $value }}"
+          action: "检查该工具的实现和依赖服务"
+
+      # 特定工具延迟过高
+      - alert: MCPToolLatencyHigh
+        expr: mcp_tool_latency_p95_ms > 2000
+        for: 5m
+        labels:
+          severity: warning
+          team: mcp-platform
+        annotations:
+          summary: "MCP 工具 {{ $labels.tool }} P95 延迟过高 ({{ $value }}ms)"
+          description: "工具 {{ $labels.tool }} 的 P95 延迟为 {{ $value }}ms"
+
+  # ==========================================
+  # 基础设施告警
+  # ==========================================
+  - name: mcp_infrastructure_alerts
+    interval: 60s
+    rules:
+      # 缓存命中率过低
+      - alert: MCPCacheHitRateLow
+        expr: mcp_cache_hit_rate < 0.5
+        for: 10m
+        labels:
+          severity: warning
+          team: mcp-platform
+        annotations:
+          summary: "MCP 缓存命中率过低 (当前值: {{ $value }})"
+          description: "缓存命中率为 {{ $value }}，低于阈值 0.5"
+          action: "检查缓存配置和 TTL 设置"
+
+      # 告警监控未运行
+      - alert: MCPAlertMonitorNotRunning
+        expr: mcp_alert_monitor_running == 0
+        for: 5m
+        labels:
+          severity: critical
+          team: mcp-platform
+        annotations:
+          summary: "MCP 告警监控调度器未运行"
+          description: "告警监控调度器已停止运行超过 5 分钟"
+          action: "检查服务日志并重启告警监控"
+
+      # ML 异常检测未运行
+      - alert: MCPSmartAlertNotRunning
+        expr: mcp_smart_alert_running == 0
+        for: 5m
+        labels:
+          severity: warning
+          team: mcp-platform
+        annotations:
+          summary: "MCP ML 异常检测未运行"
+          description: "智能告警系统已停止运行超过 5 分钟"
+          action: "检查 ML 依赖包是否安装"

@@ -105,6 +105,62 @@ class MetricsCollector:
         p95_latency = np.percentile(durations, 95)
         return float(p95_latency)
 
+    def collect_latency_p99(self, session_id: str | None = None) -> float:
+        """
+        Calculate P99 latency within the time window (tail latency).
+
+        Args:
+            session_id: Optional session filter.
+
+        Returns:
+            P99 latency in milliseconds.
+        """
+        traces = self._fetch_traces(session_id=session_id)
+
+        if not traces:
+            return 0.0
+
+        durations = []
+        for trace in traces:
+            if hasattr(trace, "duration") and trace.duration is not None:
+                durations.append(trace.duration)
+
+        if not durations:
+            return 0.0
+
+        import numpy as np
+
+        p99_latency = np.percentile(durations, 99)
+        return float(p99_latency)
+
+    def collect_latency_p50(self, session_id: str | None = None) -> float:
+        """
+        Calculate P50 latency (median) within the time window.
+
+        Args:
+            session_id: Optional session filter.
+
+        Returns:
+            P50 (median) latency in milliseconds.
+        """
+        traces = self._fetch_traces(session_id=session_id)
+
+        if not traces:
+            return 0.0
+
+        durations = []
+        for trace in traces:
+            if hasattr(trace, "duration") and trace.duration is not None:
+                durations.append(trace.duration)
+
+        if not durations:
+            return 0.0
+
+        import numpy as np
+
+        p50_latency = np.percentile(durations, 50)
+        return float(p50_latency)
+
     def collect_request_rate(self) -> float:
         """
         Calculate request rate (QPS) within the time window.
@@ -141,6 +197,126 @@ class MetricsCollector:
         except Exception as e:
             logger.warning("Failed to collect satisfaction scores: %s", e)
             return None
+
+    def count_active_sessions(self) -> int:
+        """
+        Count unique active sessions within the time window.
+
+        Returns:
+            Number of unique session IDs.
+        """
+        traces = self._fetch_traces()
+
+        if not traces:
+            return 0
+
+        session_ids = set()
+        for trace in traces:
+            if hasattr(trace, "session_id") and trace.session_id:
+                session_ids.add(trace.session_id)
+
+        return len(session_ids)
+
+    def collect_error_breakdown(self) -> dict[str, int]:
+        """
+        Get error breakdown by error type/category.
+
+        Analyzes trace metadata and status to categorize errors.
+
+        Returns:
+            Dictionary mapping error categories to their counts.
+        """
+        traces = self._fetch_traces()
+
+        if not traces:
+            return {}
+
+        error_breakdown: dict[str, int] = {}
+
+        for trace in traces:
+            if hasattr(trace, "status") and trace.status == "ERROR":
+                # Try to get error category from metadata
+                error_category = "unknown"
+
+                if hasattr(trace, "metadata") and trace.metadata:
+                    error_category = trace.metadata.get("error_type", "unknown")
+
+                # Check for specific error patterns in trace name
+                if hasattr(trace, "name") and trace.name:
+                    trace_name = trace.name.lower()
+                    if "timeout" in trace_name:
+                        error_category = "timeout"
+                    elif "rate_limit" in trace_name or "rate-limit" in trace_name:
+                        error_category = "rate_limit"
+                    elif "validation" in trace_name:
+                        error_category = "validation_error"
+
+                error_breakdown[error_category] = error_breakdown.get(error_category, 0) + 1
+
+        return error_breakdown
+
+    def collect_tool_metrics(self, tool_name: str) -> dict[str, Any]:
+        """
+        Collect metrics for a specific tool.
+
+        Args:
+            tool_name: Name of the tool to collect metrics for.
+
+        Returns:
+            Dictionary containing tool-specific metrics.
+        """
+        traces = self._fetch_traces()
+
+        if not traces:
+            return {
+                "tool_name": tool_name,
+                "call_count": 0,
+                "success_rate": 1.0,
+                "p50_latency_ms": 0.0,
+                "p95_latency_ms": 0.0,
+                "p99_latency_ms": 0.0,
+                "error_count": 0,
+            }
+
+        # Filter traces for this tool
+        tool_traces = [t for t in traces if hasattr(t, "name") and t.name and tool_name in t.name]
+
+        if not tool_traces:
+            return {
+                "tool_name": tool_name,
+                "call_count": 0,
+                "success_rate": 1.0,
+                "p50_latency_ms": 0.0,
+                "p95_latency_ms": 0.0,
+                "p99_latency_ms": 0.0,
+                "error_count": 0,
+            }
+
+        import numpy as np
+
+        # Calculate metrics
+        total_count = len(tool_traces)
+        error_count = sum(1 for t in tool_traces if hasattr(t, "status") and t.status == "ERROR")
+        success_rate = (total_count - error_count) / total_count
+
+        # Calculate latencies
+        durations = [
+            t.duration for t in tool_traces if hasattr(t, "duration") and t.duration is not None
+        ]
+
+        p50_latency = float(np.percentile(durations, 50)) if durations else 0.0
+        p95_latency = float(np.percentile(durations, 95)) if durations else 0.0
+        p99_latency = float(np.percentile(durations, 99)) if durations else 0.0
+
+        return {
+            "tool_name": tool_name,
+            "call_count": total_count,
+            "success_rate": success_rate,
+            "p50_latency_ms": p50_latency,
+            "p95_latency_ms": p95_latency,
+            "p99_latency_ms": p99_latency,
+            "error_count": error_count,
+        }
 
     def get_historical_data(
         self,
