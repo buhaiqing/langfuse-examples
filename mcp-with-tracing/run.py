@@ -150,9 +150,25 @@ def print_access_guide():
     
     print("🔌 MCP Server Access:")
     print("-" * 80)
-    print("  • Transport: Stdio (default for MCP)")
-    print("  • Protocol: JSON-RPC 2.0")
-    print("  • Status: Server will listen for stdin/stdout connections")
+    
+    transport = os.getenv("MCP_TRANSPORT", "http").lower()
+    host = os.getenv("MCP_HOST", "0.0.0.0")
+    port = int(os.getenv("MCP_PORT", "8001"))
+    
+    if transport in ("http", "streamable-http"):
+        print(f"  • Transport: HTTP (Streamable HTTP)")
+        print(f"  • Endpoint: http://{host}:{port}/mcp")
+        print(f"  • Protocol: JSON-RPC 2.0 over HTTP")
+        print(f"  • Status: Server listening on port {port}")
+    elif transport == "sse":
+        print(f"  • Transport: SSE (Server-Sent Events)")
+        print(f"  • Endpoint: http://{host}:{port}/sse")
+        print(f"  • Protocol: JSON-RPC 2.0 over SSE")
+        print(f"  • Status: Server listening on port {port}")
+    else:
+        print(f"  • Transport: Stdio (default for MCP)")
+        print(f"  • Protocol: JSON-RPC 2.0")
+        print(f"  • Status: Server will listen for stdin/stdout connections")
     print()
     
     print("🛠️  Available MCP Tools:")
@@ -268,9 +284,16 @@ def print_error_help(error: Exception):
 def main():
     """Run the MCP server with proper Python path configuration and diagnostics."""
     try:
+        # Load environment variables from .env file
+        from dotenv import load_dotenv
+        load_dotenv()  # 必须在最前面加载，确保后续代码能读取到环境变量
+        
         # Add project root to Python path to resolve 'src' imports
         project_root = Path(__file__).parent
         sys.path.insert(0, str(project_root))
+        
+        # 切换到项目根目录，确保 pydantic-settings 能找到 .env 文件
+        os.chdir(project_root)
         
         # Print startup banner
         print_banner()

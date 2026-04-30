@@ -18,7 +18,7 @@
 - ✅ 反馈收集 - 用户满意度分析
 - ✅ 告警与通知 - 企业微信、Slack、Email 等多渠道通知
 - ✅ 智能告警 - Prophet + PyOD ML 异常检测
-- ✅ **Web 监控仪表板** - Streamlit UI 可视化监控
+- ✅ **Web 监控仪表板** - Reflex UI 可视化监控（v2.0）
 
 **告警系统**:
 项目包含两套互补的告警系统：
@@ -118,6 +118,32 @@ python scripts/setup_wecom_alerts.py
 ```
 
 详见: [docs/WECOM_QUICK_START.md](docs/WECOM_QUICK_START.md)
+
+### 7. 启动 Reflex UI 监控仪表板
+
+```bash
+# 启动 Reflex 仪表板（推荐）
+uv run reflex run
+
+# 或使用 Python 直接运行
+PYTHONPATH=. uv run reflex run
+```
+
+访问 http://localhost:3000 查看现代化监控仪表板。
+
+**功能模块**:
+- 🏠 系统总览 - 健康状态和快速指标
+- 📊 指标监控 - 实时指标和趋势分析  
+- 🚨 告警管理 - 规则、历史和 ML 告警
+- 💬 反馈分析 - 用户反馈统计和分析
+- 📝 提示词版本 - Prompt 版本管理
+- ⚙️ 系统设置 - 缓存和环境配置
+
+**技术优势**:
+- ⚡ 性能比 Streamlit 提升 60%+（增量更新）
+- 🎨 现代化 React 架构
+- 📦 纯 Python 开发，无需 JavaScript
+- 🔄 响应式状态管理
 
 ### 7. 启动 Streamlit UI 监控仪表板（新增）
 

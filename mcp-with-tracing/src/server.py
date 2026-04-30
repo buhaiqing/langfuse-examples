@@ -232,7 +232,18 @@ def main() -> None:
             "Install dependencies: pip install prophet pyod pandas numpy scikit-learn"
         )
 
-    mcp.run()
+    # 支持通过环境变量配置传输模式
+    import os
+    transport = os.getenv("MCP_TRANSPORT", "stdio").lower()
+    host = os.getenv("MCP_HOST", "0.0.0.0")
+    port = int(os.getenv("MCP_PORT", "8001"))
+    
+    if transport in ("http", "streamable-http", "sse"):
+        logger.info("Starting MCP Server with %s transport on %s:%d", transport, host, port)
+        mcp.run(transport=transport, host=host, port=port)
+    else:
+        logger.info("Starting MCP Server with stdio transport")
+        mcp.run(transport="stdio")
 
 
 if __name__ == "__main__":

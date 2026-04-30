@@ -19,8 +19,20 @@ def load_health_status() -> dict[str, Any]:
         健康状态字典，失败时返回降级数据。
     """
     try:
+        # 确保 Langfuse 客户端已初始化
+        from src.observability.instrumentation import get_langfuse_client, init_observability
+        
+        client = get_langfuse_client()
+        if client is None:
+            # 尝试初始化
+            try:
+                from src.observability.config import ObservabilityConfig
+                config = ObservabilityConfig()
+                init_observability(config)
+            except Exception as init_error:
+                logger.warning(f"Langfuse 初始化失败: {init_error}")
+        
         from src.observability.health import get_health_status
-
         return get_health_status()
     except Exception as e:
         logger.error(f"Failed to load health status: {e}")
